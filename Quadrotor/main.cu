@@ -102,10 +102,12 @@ int main(int argc, char **argv)
     paramsSizeQuadHyperPlane = numUnknownParamQHP; //ホライズンの大きさに併せて、局所サンプルのサイズを決定
     paramsSizeQuadHyperPlane = paramsSizeQuadHyperPlane + addTermForLSM;
 
-    dim3 block(MAX_DIVISOR,1);
+    // dim3 block(123);
+    dim3 block(73);
     // dim3 block(1,1);
-    dim3 grid((numUnknownParamQHP + block.x - 1)/ block.x, (numUnknownParamQHP + block.y -1) / block.y);
+    dim3 grid((numUnknownParamQHP + block.x - 1)/ block.x, numUnknownParamQHP);
     printf("#NumBlocks = %d\n", numBlocks);
+    printf("grid(%d,%d) block(%d,%d)", grid.x, grid.y, block.x, block.y);
     printf("#NumBlocks = %d\n", numUnknownParamQHP);
 
 #ifdef WRITE_MATRIX_INFORMATION
@@ -187,6 +189,7 @@ int main(int argc, char **argv)
         }
     }
     hostData[0] = hostSCV->params[0];
+    printf("u[0] = %lf, u[4] = %lf, u[8] = %lf", hostData[0], hostData[4], hostData[8]);
     CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice));
 
     /* 制御ループの開始 */
@@ -231,7 +234,7 @@ int main(int argc, char **argv)
     mInputSystem tsDims = MultiInput;
     for(int t = 0; t < SIM_TIME; t++)
     {
-        shift_Input_vec( hostData );
+        // shift_Input_vec( hostData );
         CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
         start_t = clock();
 
@@ -253,7 +256,8 @@ int main(int argc, char **argv)
                 // getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
                 // weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
-                weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                // weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
                 // weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
@@ -294,7 +298,8 @@ int main(int argc, char **argv)
                 getEliteSampleInfo_multiInput<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 // getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
-                weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
+                // weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 // weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
@@ -320,6 +325,7 @@ int main(int argc, char **argv)
                     NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
                 }else{
                     NewtonLikeMethodGetRegularMatrixTypeB<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                    cudaDeviceSynchronize();
                 }
                 // NewtonLikeMethodGenNormalizationMatrix<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
 
@@ -330,6 +336,7 @@ int main(int argc, char **argv)
                 NewtonLikeMethodGetRegularVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
                 // printf("hoge %d hoge\n",t);
                 cudaDeviceSynchronize();
+                // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
 #ifdef WRITE_MATRIX_INFORMATION
                 if(t<100){
                     if(t % 10 == 0){
@@ -413,12 +420,12 @@ int main(int argc, char **argv)
                 MatrixMultiplyOperation<<<InputByHorizon,InputByHorizon>>>(Hessian, 2.0, lowerHessian);
 
 #ifdef WRITE_MATRIX_INFORMATION
-                if(t<10){
-                    if(t % 1 == 0){
+                if(t<100){
+                    if(t % 10 == 0){
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[1].name, "HessianMatrix");
-                        name[1].dimSize = HORIZON;
-                        CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * HORIZON * HORIZON, cudaMemcpyDeviceToHost));
+                        name[1].dimSize = InputByHorizon;
+                        CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * InputByHorizon * InputByHorizon, cudaMemcpyDeviceToHost));
                         write_Matrix_Information(WriteHessian, &name[1], timerParam);
                     }
                 }
@@ -466,7 +473,9 @@ int main(int argc, char **argv)
                 CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(double) * InputByHorizon, cudaMemcpyDeviceToHost) );
                 CHECK(cudaDeviceSynchronize());
                 // NewtonLikeMethodInputSaturation(hostTempData, hostSCV->constraints[1], hostSCV->constraints[0]);
+                Quadrotor_Input_recalculation(hostTempData, hostSCV);
                 Quadrotor_InputSaturation(hostTempData, hostSCV);
+                
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
                     Proposed_F[uIndex] = hostTempData[uIndex];

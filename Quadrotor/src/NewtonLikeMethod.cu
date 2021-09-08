@@ -186,16 +186,30 @@ __global__ void NewtonLikeMethodGetTensorVectorTest(QHP *Out, SampleInfo *In, in
                 {
                     for(int k = i; k < HORIZON; k++)
                     {
-                        for(int h = 0; h < DIM_OF_INPUT; h++){
+                        if(k == i){
+                            for(int h = j; h < DIM_OF_INPUT; h++){
         #ifdef USING_WEIGHTED_LEAST_SQUARES
-                            Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * sqrtf( In[indices[id]].WHM );
-                            Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
+                                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * sqrtf( In[indices[id]].WHM );
+                                Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
         #else
-                            Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
-                            Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
         #endif
-                            next_indices += 1;
+                                next_indices += 1;
+                            }
+                        }else{
+                            for(int h = 0; h < DIM_OF_INPUT; h++){
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+                                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * sqrtf( In[indices[id]].WHM );
+                                Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
+        #else
+                                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+        #endif
+                                next_indices += 1;
+                            }
                         }
+                        
                     }
                 }
             }
@@ -206,22 +220,25 @@ __global__ void NewtonLikeMethodGetTensorVectorTest(QHP *Out, SampleInfo *In, in
                 {
         #ifdef USING_WEIGHTED_LEAST_SQUARES
                     Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i] * sqrtf( In[indices[id]].WHM );
-                    Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[j][i] * In[indices[id]].WHM;
+                    Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].WHM;
         #else
                     Out[id].tensor_vector[next_indices] = In[indices[id]].Input[j][i];
-                    Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[j][i];
+                    Out[id].column_vector[next_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i];
         #endif
                     next_indices += 1;
                 }
             }
         #ifdef USING_WEIGHTED_LEAST_SQUARES
             Out[id].tensor_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = 1.0 * sqrtf( In[indices[id]].WHM );
-            Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = In[indices[id]].L * In[indices[id]].WHM;
+            Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = In[indices[id]].LF * In[indices[id]].WHM;
         #else
             Out[id].tensor_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = 1.0;
-            Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = In[indices[id]].L; 
+            Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = In[indices[id]].LF;
         #endif
             __syncthreads();
+            if(id == 0){
+                printf("next_indices == %d\n",next_indices);
+            }
             break;
         
         default:
@@ -339,7 +356,8 @@ __global__ void NewtonLikeMethodGetRegularMatrix(double *Mat, QHP *element, int 
 __global__ void NewtonLikeMethodGetRegularMatrixTypeB(double *Mat, QHP *element, int Sample_size, int Ydimention)
 {
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
-    unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int iy = blockIdx.y;
+    // unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
     unsigned int idx = iy * Ydimention + ix;
     Mat[idx] = 0.0; //initialization
     for(int index = 0; index < Sample_size; index++)
@@ -348,6 +366,21 @@ __global__ void NewtonLikeMethodGetRegularMatrixTypeB(double *Mat, QHP *element,
     }
     __syncthreads();
 
+}
+
+__global__ void NewtonLikeMethodCopyTensorVector(double *Mat, QHP *element, int Ydimention)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int iy = blockIdx.y;
+    // unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int idx = iy * Ydimention + ix;
+    Mat[idx] = element[ix].tensor_vector[iy];
+    /*if(idx <= Ydimention * HORIZON ){
+        if(idx % Ydimention == 0){
+            printf("element[%d].tensor_vector[%d] = %lf\n", ix, iy, element[ix].tensor_vector[iy]);
+        }
+    }*/
+    __syncthreads();
 }
 
 __global__ void NewtonLikeMethodGetRegularVector(double *Vec, QHP *element, int Sample_size)
@@ -381,7 +414,8 @@ __global__ void NewtonLikeMethodGetHessianOriginal(double *Hessian, double *Hess
         for(int t_id = 0; t_id < threadIdx.x; t_id++)
         {
             int sum_a = t_id + 1;
-            vector_id += (HORIZON - sum_a);
+            vector_id += (HORIZON * DIM_OF_INPUT - sum_a);
+            // vector_id += (HORIZON - sum_a);
         }
         temp_here = HessianElements[vector_id];
     }else{

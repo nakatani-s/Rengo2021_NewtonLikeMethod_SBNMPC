@@ -17,6 +17,7 @@
 void NewtonLikeMethodInputSaturation(double *In, double Umax, double Umin);
 void NewtonLikeMethodGetIterResult(SampleInfo *RetInfo, double costValue, double *InputSeq);
 
+__global__ void NewtonLikeMethodCopyTensorVector(double *Mat, QHP *element, int Ydimention);
 __global__ void NewtonLikeMethodGetTensorVectorNoIndex(QHP *Out, SampleInfo *Info);
 __global__ void NewtonLikeMethodGetTensorVectorNormarizationed(QHP *Out, SampleInfo *In, int *indices, SystemControlVariable *SCV);
 

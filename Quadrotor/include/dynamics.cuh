@@ -11,6 +11,7 @@
 
 // System Dynamics
 void Quadrotor_InputSaturation(double *U, SystemControlVariable *SCV);
+void Quadrotor_Input_recalculation(double *U, SystemControlVariable *SCV);
 __host__ __device__ double Cart_type_Pendulum_ddx(double u, double x, double theta, double dx, double dtheta, SystemControlVariable *SCV);
 __host__ __device__ double Cart_type_Pendulum_ddtheta(double u, double x,  double theta, double dx, double dtheta, SystemControlVariable *SCV);
 __host__ __device__ void dynamics_ddot_Quadrotor(double *dstate, double u1, double u2, double u3, double u4, double *c_state, SystemControlVariable *SCV);

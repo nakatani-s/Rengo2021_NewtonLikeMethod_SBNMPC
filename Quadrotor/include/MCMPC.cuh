@@ -15,6 +15,7 @@
 void shift_Input_vec( double *inputVector);
 void weighted_mean(double *Output, int num_elite, SampleInfo *hInfo);
 void weighted_mean_multiInput(double *Output, int num_elite, SampleInfo *hInfo);
+void weighted_mean_multiInput_Quadrotor(double *Output, int num_elite, SampleInfo *hInfo, SystemControlVariable *SCV);
 
 __device__ void gen_multi_input(double *u, unsigned int id, curandState *state, const int step, double *ave, double var);
 

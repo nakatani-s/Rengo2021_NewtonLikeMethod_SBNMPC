@@ -30,6 +30,25 @@ void Quadrotor_InputSaturation(double *U, SystemControlVariable *SCV)
     }
 }
 
+void Quadrotor_Input_recalculation(double *U, SystemControlVariable *SCV)
+{
+    int uIndex;
+    for(int i = 0; i < HORIZON; i++)
+    {
+        for(int j = 0; j < DIM_OF_INPUT; j++)
+        {
+            uIndex = i * DIM_OF_INPUT + j;
+            if(uIndex % 4 == 0)
+            {
+                U[uIndex] = U[uIndex] * SCV->constraints[5];
+            }else{
+                U[uIndex] = U[uIndex];
+            }
+        }
+    }
+}
+
+
 __host__ __device__ double Cart_type_Pendulum_ddx(double u, double x, double theta, double dx, double dtheta, SystemControlVariable *SCV)
 {
     double a[10];
@@ -91,6 +110,7 @@ __host__ __device__ double Cart_type_Pendulum_ddtheta(double u, double x,  doubl
 __host__ __device__ void dynamics_ddot_Quadrotor(double *dstate, double u1, double u2, double u3, double u4, double *c_state, SystemControlVariable *SCV)
 {
     double gamm, beta, alpha;
+    double mu = 0.0;
     gamm = c_state[6];
     beta = c_state[7];
     alpha = c_state[8];
@@ -100,17 +120,20 @@ __host__ __device__ void dynamics_ddot_Quadrotor(double *dstate, double u1, doub
     dstate[4] = c_state[5]; // dZ
 
     dstate[1] = u1 * ( cosf(gamm)*sinf(beta)*cosf(alpha) + sinf(gamm) * sinf(alpha) ); // ddX
-    dstate[3] = u1 * ( cosf(gamm)*sinf(beta)*cosf(alpha) + sinf(gamm) * cosf(alpha) ); // ddY
+    dstate[3] = u1 * ( cosf(gamm)*sinf(beta)*sinf(alpha) - sinf(gamm) * cosf(alpha) ); // ddY
     dstate[5] = u1 * cosf(gamm) * cosf(beta) - SCV->params[0]; // ddZ
 
-    if(cosf(beta) == 0.0f)
+    /*if(cosf(beta) == 0.0f)
     {
         dstate[6] = ( u2 * cosf(gamm) + u3 * sinf(gamm)) / zeta;
     }else{
         dstate[6] = (u2 * cosf(gamm) + u3 * sinf(gamm)) / cosf(beta);
-    }
+    }*/
+    mu = u2*cosf(gamm) + u3 * sinf(gamm);
+    // dstate[6] = (u2 * cosf(gamm) + u3 * sinf(gamm)) / cosf(beta);
+    dstate[6] = mu / cosf(beta);
     dstate[7] = -u2 * sinf(gamm) + u3 * cosf(gamm); // Beta
-    dstate[8] = u2 * cosf(gamm) * tanf(beta) + u3 * sinf(gamm) * tanf(beta) + u4; //d_alpha
+    dstate[8] = u2 * cosf(gamm) * tan(beta) + u3 * sinf(gamm) * tan(beta) + u4; //d_alpha
 }
 
 __host__ __device__ void get_Lx_Cart_and_SinglePole(double *Lx, Tolerance *prev, SystemControlVariable *SCV)

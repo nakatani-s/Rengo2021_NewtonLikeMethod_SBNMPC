@@ -79,6 +79,43 @@ void weighted_mean_multiInput(double *Output, int num_elite, SampleInfo *hInfo)
     }
 }
 
+void weighted_mean_multiInput_Quadrotor(double *Output, int num_elite, SampleInfo *hInfo, SystemControlVariable *SCV)
+{
+    double totalWeight = 0.0;
+    double temp[HORIZON * DIM_OF_INPUT] = { };
+    for(int i = 0; i < num_elite; i++){
+        if(isnan(hInfo[i].W)){
+            totalWeight += 0.0;
+        }else{
+            totalWeight += hInfo[i].W;
+        }
+    }
+    int U_ID;
+    for(int i = 0; i < HORIZON; i++){
+        for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++){
+            U_ID = i * DIM_OF_INPUT + uIndex;
+            for(int k = 0; k < num_elite; k++){
+                if(isnan(hInfo[k].W))
+                {
+                    temp[U_ID] += 0.0;
+                }else{
+                    temp[U_ID] += (hInfo[k].W * hInfo[k].Input[uIndex][i]) / totalWeight;
+                }
+            }
+            if(isnan(temp[U_ID]))
+            {
+                Output[U_ID] = 0.0;
+            }else{
+                if(U_ID % 4 == 0){
+                    Output[U_ID] = temp[U_ID] * SCV->constraints[5];
+                }else{
+                    Output[U_ID] = temp[U_ID];
+                }
+            }
+        }
+    }
+}
+
 
 
 __global__ void setup_kernel(curandState *state,int seed)
@@ -227,6 +264,7 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
     int init_ID;
     double stageCost = 0.0;
     double totalCost = 0.0;
+    double totalCost_Fit = 0.0;
     double logBarrier = 0.0;
     double u[HORIZON * DIM_OF_INPUT] = { };
     double current_guess[DIM_OF_INPUT] = { };
@@ -242,14 +280,16 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
     for(int t = 0; t < HORIZON; t++)
     {
         init_ID = t * DIM_OF_INPUT;
+        int index_input;
         // gen_multi_input(seq, randomSeed, )
         if(isnan(mean[t*DIM_OF_INPUT]) || isnan(mean[t*DIM_OF_INPUT+1]) || isnan(mean[t*DIM_OF_INPUT+2]) || isnan(mean[t*DIM_OF_INPUT+3])){
             for(int id_cg = 0; id_cg < DIM_OF_INPUT; id_cg++)
             {
-                current_guess[id_cg] = Info[0].Input[id_cg][t];
+                // current_guess[id_cg] = Info[0].Input[id_cg][t];
+                index_input = t * DIM_OF_INPUT + id_cg;
+                current_guess[id_cg] = mean[index_input];
             }
         }else{
-            int index_input;
             for(int id_cg = 0; id_cg < DIM_OF_INPUT; id_cg++)
             {
                 index_input = t * DIM_OF_INPUT + id_cg;
@@ -257,6 +297,10 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
             }
         }
         gen_multi_input(u, seq, randomSeed, t, current_guess, var);
+        seq += NUM_OF_SAMPLES;
+        /*if(id % 5000 == 0){
+            printf("id::= %d, u[0]=:%lf, u[1] = %lf, u[2] = %lf, u[3] = %lf\n", id,  mean[init_ID], u[init_ID+1], u[init_ID+2], u[init_ID+3]);
+        }*/
 #ifdef InputSaturation
         if(u[init_ID] < SCV->constraints[4])
         {
@@ -264,9 +308,9 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
         }
         if(u[init_ID] > SCV->constraints[5])
         {
-            u[init_ID] = SCV->constraints[5] + zeta;
+            u[init_ID] = SCV->constraints[5] - zeta;
         }
-        for(int c_i = 0; c_i < DIM_OF_INPUT; c_i++)
+        for(int c_i = 1; c_i < DIM_OF_INPUT; c_i++)
         {
             if(u[init_ID+c_i] < SCV->constraints[2]){
                 u[init_ID+c_i] = SCV->constraints[2] + zeta;
@@ -307,11 +351,17 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
         }*/
 
         totalCost += stageCost + Rho * logBarrier;
+        totalCost_Fit += stageCost;
         logBarrier = 0.0;
         stageCost = 0.0;
     }
     double KL_COST, S, lambda, HM_COST, HM;
-    lambda = mic * HORIZON;
+    if(totalCost > 100){
+        lambda =  10 * HORIZON * DIM_OF_INPUT;
+    }else{
+        lambda = mic * HORIZON * DIM_OF_INPUT;
+    }
+    
     HM = totalCost / (hdelta * HORIZON);
     S = totalCost / lambda;
     KL_COST = exp(-S);
@@ -319,7 +369,8 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
     __syncthreads();
 
     Info[id].W = KL_COST;
-    Info[id].L = totalCost / HORIZON;
+    Info[id].L = totalCost / NUM_OF_PARABOLOID_COEFFICIENT;
+    Info[id].LF = totalCost_Fit / NUM_OF_PARABOLOID_COEFFICIENT;
     Info[id].WHM = HM_COST;
     cost_vec[id] = totalCost;
     int uIndex;
@@ -327,7 +378,12 @@ __global__ void MCMPC_Quadrotor( SystemControlVariable *SCV, double var, curandS
         for(int id_input = 0; id_input < DIM_OF_INPUT; id_input++)
         {
             uIndex = index * DIM_OF_INPUT + id_input;
-            Info[id].Input[id_input][index] = u[uIndex];
+            if(uIndex % 4 == 0){
+                Info[id].Input[id_input][index] = u[uIndex] / SCV->constraints[5];
+            }else{
+                Info[id].Input[id_input][index] = u[uIndex];
+            }
+            // Info[id].Input[id_input][index] = u[uIndex]; 
         }
     }
     __syncthreads();

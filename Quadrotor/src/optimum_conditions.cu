@@ -185,7 +185,10 @@ void calc_Cost_Quadrotor(double *cost, double *U, SystemControlVariable *SCV)
 
         costValue[0] += stageCost;
         costValue[1] += stageCost + Rho * logBarrier;
+        logBarrier = 0.0;
     }
+    cost[0] = costValue[0];
+    cost[1] = costValue[1];
 
 }
 

@@ -10,6 +10,7 @@
 
 typedef struct{
     double L;
+    double LF;
     double W;
     double WHM;
     double Input[DIM_OF_INPUT][HORIZON];

@@ -17,7 +17,8 @@ void printMatrix(int m, int n, double*A, int lda, const char* name)
 __global__ void MatrixSetUpLargeIdentityMatrix(double *IdMat, int Ydimention)
 {
     int ix = threadIdx.x + blockIdx.x * blockDim.x;
-    int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    // int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    int iy = blockIdx.y;
     unsigned int id = iy * Ydimention + ix;
 
     if(ix == iy)

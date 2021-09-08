@@ -36,8 +36,8 @@ void init_constraint( double *a )
     // For Quadric Fitting Superior Constraints parameters
     a[0] = -0.2; // for γ，β，α
     a[1] = 0.2; // for γ，β，α
-    a[2] = -1.0; // u2 u3 u4
-    a[3] = 1.0; // for u2 u3 u4
+    a[2] = -2.0; // u2 u3 u4
+    a[3] = 2.0; // for u2 u3 u4
     a[4] = 0.0; // for u1
     a[5] = 11.0; // for u1
 
