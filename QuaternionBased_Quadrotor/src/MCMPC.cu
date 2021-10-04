@@ -91,29 +91,40 @@ void weighted_mean_multiInput_Quadrotor(double *Output, int num_elite, SampleInf
         }
     }
     int U_ID;
-    for(int i = 0; i < HORIZON; i++){
-        for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++){
-            U_ID = i * DIM_OF_INPUT + uIndex;
-            for(int k = 0; k < num_elite; k++){
-                if(isnan(hInfo[k].W))
-                {
-                    temp[U_ID] += 0.0;
-                }else{
-                    temp[U_ID] += (hInfo[k].W * hInfo[k].Input[uIndex][i]) / totalWeight;
-                }
+    if(totalWeight == 0){
+        for(int i=0; i < HORIZON; i++){
+            for(int k = 0; k < DIM_OF_INPUT; k++){
+                U_ID = i * DIM_OF_INPUT + k;
+                Output[U_ID] = hInfo[0].Input[k][i];
             }
-            if(isnan(temp[U_ID]))
-            {
-                Output[U_ID] = 0.0;
-            }else{
-                if(U_ID % 4 == 0){
-                    Output[U_ID] = temp[U_ID] * SCV->constraints[5];
+        }
+    }else{
+        for(int i = 0; i < HORIZON; i++){
+            for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++){
+                U_ID = i * DIM_OF_INPUT + uIndex;
+                for(int k = 0; k < num_elite; k++){
+                    if(isnan(hInfo[k].W))
+                    {
+                        temp[U_ID] += 0.0;
+                    }else{
+                        temp[U_ID] += (hInfo[k].W * hInfo[k].Input[uIndex][i]) / totalWeight;
+                    }
+                }
+                if(isnan(temp[U_ID]))
+                {
+                    Output[U_ID] = 0.0;
                 }else{
-                    Output[U_ID] = temp[U_ID];
+                    if(U_ID % 4 == 0){
+                        // Output[U_ID] = temp[U_ID] * SCV->constraints[5];
+                        Output[U_ID] = temp[U_ID];
+                    }else{
+                        Output[U_ID] = temp[U_ID];
+                    }
                 }
             }
         }
     }
+    
 }
 
 
@@ -464,10 +475,12 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
         // デカップリング入力で十分回転数の方も制限できるよ
         logBarrier += -logf(u[init_ID+1]+SCV->constraints[3])-logf(u[init_ID+2]+SCV->constraints[3])-logf(u[init_ID+3]+SCV->constraints[3]);
         logBarrier += -logf(SCV->constraints[3]-u[init_ID+1])-logf(SCV->constraints[3]-u[init_ID+2])-logf(SCV->constraints[3]-u[init_ID+3]);
-        logBarrier += -logf(stateInThisThreads[6]+SCV->constraints[1])-logf(stateInThisThreads[7]+SCV->constraints[1])-logf(stateInThisThreads[8]+SCV->constraints[1]);
-        logBarrier += -logf(SCV->constraints[1]-stateInThisThreads[6])-logf(SCV->constraints[1]-stateInThisThreads[7])-logf(SCV->constraints[1]-stateInThisThreads[8]);
+        // logBarrier += -logf(stateInThisThreads[4]+10);
+        // logBarrier += -logf(stateInThisThreads[6]+SCV->constraints[1])-logf(stateInThisThreads[7]+SCV->constraints[1])-logf(stateInThisThreads[8]+SCV->constraints[1]);
+        // logBarrier += -logf(SCV->constraints[1]-stateInThisThreads[6])-logf(SCV->constraints[1]-stateInThisThreads[7])-logf(SCV->constraints[1]-stateInThisThreads[8]);
         logBarrier += -logf(SCV->constraints[5]-u[init_ID])-logf(u[init_ID]);
-        logBarrier += sRho * ((SCV->constraints[3]-SCV->constraints[2])+(SCV->constraints[1]-SCV->constraints[0])+(SCV->constraints[5]-SCV->constraints[4]));
+        logBarrier += sRho * ((SCV->constraints[3]-SCV->constraints[2])/*+(SCV->constraints[1]-SCV->constraints[0])*/+(SCV->constraints[5]-SCV->constraints[4]));
+        // logBarrier += sRho * (stateInThisThreads[4] + (SCV->constraints[3]-SCV->constraints[2])/*+(SCV->constraints[1]-SCV->constraints[0])*/+(SCV->constraints[5]-SCV->constraints[4]));
         
         stageCost = SCV->weightMatrix[0] * (stateInThisThreads[0] - SCV->params[1]) * (stateInThisThreads[0] - SCV->params[1])
                     + SCV->weightMatrix[2] * (stateInThisThreads[2] - SCV->params[2]) * (stateInThisThreads[2] - SCV->params[2])
@@ -493,7 +506,7 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
         stageCost = 0.0;
     }
     double KL_COST, S, lambda, HM_COST, HM;
-    if(totalCost > 100){
+    if(150 < totalCost){
         lambda =  10 * HORIZON * DIM_OF_INPUT;
     }else{
         lambda = mic * HORIZON * DIM_OF_INPUT;
@@ -507,7 +520,8 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
 
     Info[id].W = KL_COST;
     Info[id].L = totalCost / NUM_OF_PARABOLOID_COEFFICIENT;
-    Info[id].LF = totalCost_Fit / NUM_OF_PARABOLOID_COEFFICIENT;
+    // Info[id].LF = totalCost_Fit / NUM_OF_PARABOLOID_COEFFICIENT;
+    Info[id].LF = totalCost / NUM_OF_PARABOLOID_COEFFICIENT;
     Info[id].WHM = HM_COST;
     cost_vec[id] = totalCost;
     int uIndex;
@@ -515,12 +529,12 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
         for(int id_input = 0; id_input < DIM_OF_INPUT; id_input++)
         {
             uIndex = index * DIM_OF_INPUT + id_input;
-            if(uIndex % 4 == 0){
+            /*if(uIndex % 4 == 0){
                 Info[id].Input[id_input][index] = u[uIndex] / SCV->constraints[5];
             }else{
                 Info[id].Input[id_input][index] = u[uIndex];
-            }
-            // Info[id].Input[id_input][index] = u[uIndex]; 
+            }*/
+            Info[id].Input[id_input][index] = u[uIndex]; 
         }
     }
     __syncthreads();

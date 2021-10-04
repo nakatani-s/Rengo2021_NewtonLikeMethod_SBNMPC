@@ -140,13 +140,17 @@ __host__ __device__ void dynamics_QuaternionBased_Quadrotor(double *dstate, doub
 {
     // double gamm, beta, alpha;
     // double mu = 0.0;
-    double o[6] = { };
+    double o[10] = { };
     o[0] = SCV->sparams[9] * SCV->sparams[3]; // M * u_max^2
-    o[1] = u1 * fabs(u1); // St(1) = u(1) * |u(1)|
-    o[2] = u2 * fabs(u2); // St(2) = u(2) * |u(2)|
-    o[3] = u3 * fabs(u3); // St(3) = u(3) * |u(3)|
-    o[4] = u4 * fabs(u4); // St(4) = u(4) * |u(4)|
-    o[5] = o[1]+o[2]+o[3]+o[4]; // St(1)+St(2)+St(3)+St(4)
+    o[1] = SCV->sparams[1] + u1 - u3 + u4; // D_U(1)
+    o[2] = SCV->sparams[1] + u1 + u3 + u4; // D_U(2)
+    o[3] = SCV->sparams[1] + u1 + u2 - u4; // D_U(3)
+    o[4] = SCV->sparams[1] + u1 - u2 - u4; // D_U(4) 
+    o[5] = o[1] * fabs(o[1]); // St(1) = D_U(1) * |D_U(1)|
+    o[6] = o[2] * fabs(o[2]); // St(2) = D_U(2) * |D_U(2)|
+    o[7] = o[3] * fabs(o[3]); // St(3) = D_U(3) * |D_U(3)|
+    o[8] = o[4] * fabs(o[4]); // St(4) = D_U(4) * |D_U(4)|
+    o[9] = o[5]+o[6]+o[7]+o[8]; // St(1)+St(2)+St(3)+St(4)
 
     /*gamm = c_state[6];
     beta = c_state[7];
@@ -156,16 +160,16 @@ __host__ __device__ void dynamics_QuaternionBased_Quadrotor(double *dstate, doub
     dstate[2] = c_state[3]; // dY
     dstate[4] = c_state[5]; // dZ
 
-    dstate[1] = 2.0 * SCV->sparams[4]*(c_state[9]*c_state[11] + c_state[10]*c_state[12])*o[5] / o[0]; //ddX
-    dstate[3] = -2.0 * SCV->sparams[4] * (c_state[9]*c_state[10] - c_state[11]*c_state[12])*o[5] / o[0]; //ddY
-    dstate[5] = (SCV->sparams[4]*(2.0 * c_state[9] * c_state[9] + 2.0 * c_state[12] * c_state[12] - 1.0) * o[5] / o[0]) - SCV->sparams[0]; // ddZ
+    dstate[1] = 2.0 * SCV->sparams[4]*(c_state[9]*c_state[11] + c_state[10]*c_state[12])*o[9] / o[0]; //ddX
+    dstate[3] = -2.0 * SCV->sparams[4] * (c_state[9]*c_state[10] - c_state[11]*c_state[12])*o[9] / o[0]; //ddY
+    dstate[5] = (SCV->sparams[4]*(2.0 * c_state[9] * c_state[9] + 2.0 * c_state[12] * c_state[12] - 1.0) * o[9] / o[0]) - SCV->sparams[0]; // ddZ
 
     // 0.5*(2.0*(Iyy-Izz)*Beta*Alpha+distL*T_max*(St(3)-St(4))/(Umpow))/Ixx
     // -0.5*(2.0*(Ixx-Izz)*Gamma*Alpha+distL*T_max*(St(1)-St(2))/(Umpow))/Iyy
     // ((Ixx-Iyy)*Gamma*Beta-Tau_max*(St(3)+St(4)-St(1)-St(2)))/Izz
-    dstate[6] = 0.5 * ( 2.0 * (SCV->sparams[7] - SCV->sparams[8]) * c_state[7] * c_state[8] + SCV->sparams[10] * SCV->sparams[4]* (o[3]-o[4]) / SCV->sparams[3]) / SCV->sparams[6]; // Gamma
-    dstate[7] = -0.5 * ( 2.0 * (SCV->sparams[6] - SCV->sparams[8]) * c_state[6] * c_state[8] + SCV->sparams[10] * SCV->sparams[4]* (o[1]-o[2]) / SCV->sparams[3]) / SCV->sparams[7]; // Beta
-    dstate[8] = ((SCV->sparams[6]-SCV->sparams[7])*c_state[6]*c_state[7]-SCV->sparams[4]*(o[3]+o[4]-o[1]-o[2]))/ SCV->sparams[8]; // alpha
+    dstate[6] = 0.5 * ( 2.0 * (SCV->sparams[7] - SCV->sparams[8]) * c_state[7] * c_state[8] + SCV->sparams[10] * SCV->sparams[4]* (o[7]-o[8]) / SCV->sparams[3]) / SCV->sparams[6]; // Gamma
+    dstate[7] = -0.5 * ( 2.0 * (SCV->sparams[6] - SCV->sparams[8]) * c_state[6] * c_state[8] + SCV->sparams[10] * SCV->sparams[4]* (o[5]-o[6]) / SCV->sparams[3]) / SCV->sparams[7]; // Beta
+    dstate[8] = ((SCV->sparams[6]-SCV->sparams[7])*c_state[6]*c_state[7]-SCV->sparams[5]*(o[7]+o[8]-o[5]-o[6]))/ SCV->sparams[8]; // alpha
 
     // -0.5*QuaX*Gamma-0.5*QuaY*Beta-0.5*QuaZ*Alpha;
     // 0.5*QuaW*Gamma+0.5*QuaY*Alpha-0.5*QuaZ*Beta;
@@ -173,7 +177,7 @@ __host__ __device__ void dynamics_QuaternionBased_Quadrotor(double *dstate, doub
     // 0.5*QuaW*Alpha+0.5*QuaX*Beta-0.5*QuaY*Gamma;
     dstate[9] = -0.5 * c_state[10] * c_state[6] - 0.5 * c_state[11] * c_state[7] - 0.5 * c_state[12] * c_state[8]; // Quaternion_W
     dstate[10] = 0.5 * c_state[9] * c_state[6] + 0.5 * c_state[11] * c_state[8] - 0.5 * c_state[12] * c_state[7]; // Quaternion_X
-    dstate[11] = 0.5 * c_state[9] * c_state[7] + 0.5 * c_state[12] * c_state[6] - 0.5 * c_state[10] * c_state[9]; // Quaternion_Y
+    dstate[11] = 0.5 * c_state[9] * c_state[7] + 0.5 * c_state[12] * c_state[6] - 0.5 * c_state[10] * c_state[8]; // Quaternion_Y
     dstate[12] = 0.5 * c_state[9] * c_state[8] + 0.5 * c_state[10] * c_state[7] - 0.5 * c_state[11] * c_state[6]; // Quaternion_Z
 }
 

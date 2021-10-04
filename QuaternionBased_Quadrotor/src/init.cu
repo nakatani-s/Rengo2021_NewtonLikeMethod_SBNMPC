@@ -55,10 +55,11 @@ void init_constraint( double *a )
     // For Quadric Fitting Superior Constraints parameters
     a[0] = -0.2; // for γ，β，α
     a[1] = 0.2; // for γ，β，α
-    a[2] = -2.0; // u2 u3 u4
-    a[3] = 2.0; // for u2 u3 u4
+    a[2] = -20.0; // u2 u3 u4
+    a[3] = 20.0; // for u2 u3 u4
     a[4] = 0.0; // for u1
-    a[5] = 11.0; // for u1
+    // a[5] = 4 * 4.235; // for u1
+    a[5] = 25.0;
 
     // For MC superior Parameter
     /*a[0] = -1.0f;
@@ -88,15 +89,15 @@ void init_matrix( double *a )
     a[6] = 10.0;
     a[7] = 10.0;
     a[8] = 10.0;
-    a[9] = 15.0;
-    a[10] = 15.0;
-    a[11] = 15.0;
+    a[9] = 100.0;
+    a[10] = 100.0;
+    a[11] = 100.0;
 
     // R
-    a[12] = 0.01;
-    a[13] = 0.01;
-    a[14] = 0.01;
-    a[15] = 0.01;
+    a[12] = 0.1;
+    a[13] = 0.1;
+    a[14] = 0.1;
+    a[15] = 0.1;
 }
 
 void init_host_vector(double *params, double *states, double *constraints, double *matrix_elements)

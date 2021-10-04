@@ -242,12 +242,12 @@ int main(int argc, char **argv)
                 // weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
                 weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 MCMPC_F = hostData[0];
-                if(iter == 0)
+                /*if(iter == 0)
                 {
                     sprintf(name[2].inputfile, "initSolution.txt");
                     name[2].dimSize = HORIZON;
                     resd_InitSolution_Input(hostData, &name[2]);
-                }
+                }*/
                 CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
                 calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol);
                 printf("cost :: %lf   KKT_Error :: %lf\n", optimumConditions[0], optimumConditions[1]);
@@ -301,7 +301,7 @@ int main(int argc, char **argv)
                 // printf("hoge %d hoge\n",t);
                 cudaDeviceSynchronize();
 #ifdef WRITE_MATRIX_INFORMATION
-                if(t<100){
+                /*if(t<100){
                     if(t % 10 == 0){
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[0].name, "RegularMatrix");
@@ -318,7 +318,7 @@ int main(int argc, char **argv)
                         write_Matrix_Information(WriteRegular, &name[0], timerParam);
                     }
 
-                }
+                }*/
 #endif
 
 #ifndef USING_QR_DECOMPOSITION
@@ -350,8 +350,10 @@ int main(int argc, char **argv)
                     CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
 
                     QR_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                    CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
+
                 }
-                CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
+                // CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
                 /* compute QR factorization */ 
                 // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
                 CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
@@ -383,7 +385,7 @@ int main(int argc, char **argv)
                 MatrixMultiplyOperation<<<HORIZON,HORIZON>>>(Hessian, 2.0, lowerHessian);
 
 #ifdef WRITE_MATRIX_INFORMATION
-                if(t<10){
+                /*if(t<10){
                     if(t % 1 == 0){
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[1].name, "HessianMatrix");
@@ -391,7 +393,7 @@ int main(int argc, char **argv)
                         CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * HORIZON * HORIZON, cudaMemcpyDeviceToHost));
                         write_Matrix_Information(WriteHessian, &name[1], timerParam);
                     }
-                }
+                }*/
 #endif
 
 #ifndef USING_QR_DECOMPOSITION
@@ -416,8 +418,9 @@ int main(int argc, char **argv)
                     CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, HORIZON, nrhs, HORIZON, Hessian, HORIZON, hQR_tau, Gradient, HORIZON, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
                     
                     w_si_hessian = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                    CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
                 }
-                CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
+                // CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
                 /* compute QR factorization */ 
 
                 // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, HORIZON, HORIZON, Hessian, HORIZON, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
@@ -458,9 +461,11 @@ int main(int argc, char **argv)
             cost_now = optimumCondition_p[0];
             CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
         }else{
-            F_input = MCMPC_F;
+            F_input = Proposed_F;
+            // F_input = MCMPC_F;
             cost_now = optimumConditions[0];
-            CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
+            CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
         }
 
         Runge_Kutta45_for_SecondaryOderSystem( hostSCV, F_input, interval);

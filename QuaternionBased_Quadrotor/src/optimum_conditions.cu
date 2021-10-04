@@ -219,10 +219,10 @@ void calc_Cost_QuaternionBased_Quadrotor(double *cost, double *U, SystemControlV
         //
         logBarrier += -logf(U[uIndex+1]+SCV->constraints[3])-logf(U[uIndex+2]+SCV->constraints[3])-logf(U[uIndex+3]+SCV->constraints[3]);
         logBarrier += -logf(SCV->constraints[3]-U[uIndex+1])-logf(SCV->constraints[3]-U[uIndex+2])-logf(SCV->constraints[3]-U[uIndex+3]);
-        logBarrier += -logf(state[6]+SCV->constraints[1])-logf(state[7]+SCV->constraints[1])-logf(state[8]+SCV->constraints[1]);
-        logBarrier += -logf(SCV->constraints[1]-state[6])-logf(SCV->constraints[1]-state[7])-logf(SCV->constraints[1]-state[8]);
+        // logBarrier += -logf(state[6]+SCV->constraints[1])-logf(state[7]+SCV->constraints[1])-logf(state[8]+SCV->constraints[1]);
+        // logBarrier += -logf(SCV->constraints[1]-state[6])-logf(SCV->constraints[1]-state[7])-logf(SCV->constraints[1]-state[8]);
         logBarrier += -logf(SCV->constraints[5]-U[uIndex])-logf(U[uIndex]);
-        logBarrier += sRho * ((SCV->constraints[3]-SCV->constraints[2])+(SCV->constraints[1]-SCV->constraints[0])+(SCV->constraints[5]-SCV->constraints[4]));
+        logBarrier += sRho * ((SCV->constraints[3]-SCV->constraints[2])/*+(SCV->constraints[1]-SCV->constraints[0])*/+(SCV->constraints[5]-SCV->constraints[4]));
 
         stageCost = SCV->weightMatrix[0] * (state[0] - SCV->params[1]) * (state[0] - SCV->params[1])
                     + SCV->weightMatrix[2] * (state[2] - SCV->params[2]) * (state[2] - SCV->params[2])

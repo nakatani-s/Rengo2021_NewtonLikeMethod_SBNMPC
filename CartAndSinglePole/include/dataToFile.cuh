@@ -4,7 +4,7 @@
 // #include "dynamics.cuh"
 
 typedef struct{
-    char name[20];
+    char name[30];
     char inputfile[35];
     int dimSize;
 }dataName;

@@ -103,7 +103,7 @@ int main(int argc, char **argv)
     paramsSizeQuadHyperPlane = paramsSizeQuadHyperPlane + addTermForLSM;
 
     // dim3 block(123);
-    dim3 block(73);
+    dim3 block(MAX_DIVISOR);
     // dim3 block(1,1);
     dim3 grid((numUnknownParamQHP + block.x - 1)/ block.x, numUnknownParamQHP);
     printf("#NumBlocks = %d\n", numBlocks);
@@ -205,7 +205,9 @@ int main(int argc, char **argv)
     double var;
 
     float process_gpu_time, procedure_all_time;
+    float diff_time;
     clock_t start_t, stop_t;
+    clock_t tensor_start_t, tensor_end_t, matcalc_s_t, matcalc_end_t;
     cudaEvent_t start, stop;
     
     dim3 inverseGmatrix(numUnknownParamQHP, numUnknownParamQHP);
@@ -245,8 +247,9 @@ int main(int argc, char **argv)
             {
                 var = variance / sqrt(iter + 1);
                 // var = variance / 2;
-                MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                // MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 // MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                MCMPC_QuaternionBased_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 cudaDeviceSynchronize();
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                 thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
@@ -256,8 +259,8 @@ int main(int argc, char **argv)
                 // getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
                 // weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
-                // weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
-                weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
+                weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                // weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
                 // weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
@@ -288,9 +291,11 @@ int main(int argc, char **argv)
             start_t = clock();
             for(int iter = 0; iter < ITERATIONS; iter++)
             {
-                var = variance / 2.0;
-                MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                var = variance / 1.0;
+                var = var / sqrt(iter + 1);
+                // MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 // MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                MCMPC_QuaternionBased_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 cudaDeviceSynchronize();
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                 thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
@@ -299,193 +304,207 @@ int main(int argc, char **argv)
                 getEliteSampleInfo_multiInput<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 // getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
-                weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
-                // weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                // weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
+                weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 // weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
                     MCMPC_F[uIndex] = hostData[uIndex];
                 }
                 
-                CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * HORIZON, cudaMemcpyHostToDevice) );
-                var = neighborVar;
-                MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
-                // MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
-                cudaDeviceSynchronize();
-                thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
-                thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
-
-                NewtonLikeMethodGetTensorVectorTest<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ),tsDims);
-                // NewtonLikeMethodGetTensorVector<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
-                // NewtonLikeMethodGetTensorVectorNormarizationed<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ), deviceSCV);
-                cudaDeviceSynchronize();
-
-                // 1024以下の"NUM_OF_PARABOLOID_COEFFICIENT"の最大約数を(thread数 / block)として計算させる方針で実行
-                // 以下は正規方程式における行列の各要素を取得する関数
-                if(NUM_OF_PARABOLOID_COEFFICIENT < 1024){
-                    NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
-                }else{
-                    NewtonLikeMethodGetRegularMatrixTypeB<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) *InputByHorizon, cudaMemcpyHostToDevice) );
+                if(iter == ITERATIONS -1){
+                    var = neighborVar;
+                    MCMPC_QuaternionBased_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                    // MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                    // MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                     cudaDeviceSynchronize();
-                }
-                // NewtonLikeMethodGenNormalizationMatrix<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                    thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
+                    thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
-                /*-----------------Error detect 2021.07.20----------------------------*/
-                // Following Function has any Error (ThreadId or BlockId) --> it is required to modify original mode.
-                // NewtonLikeMethodGenNormalEquation<<<grid, block>>>(Gmatrix, CVector, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
-                // NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
-                NewtonLikeMethodGetRegularVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
-                // printf("hoge %d hoge\n",t);
-                cudaDeviceSynchronize();
-                // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
-#ifdef WRITE_MATRIX_INFORMATION
-                if(t<100){
-                    if(t % 10 == 0){
-                        get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
-                        sprintf(name[0].name, "RegularMatrix");
-                        name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
-                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(double) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
-                        write_Matrix_Information(WriteRegular, &name[0], timerParam);
-                    }
-                }else{
-                    if(t % 250 == 0){
-                        get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
-                        sprintf(name[0].name, "RegularMatrix");
-                        name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
-                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(double) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
-                        write_Matrix_Information(WriteRegular, &name[0], timerParam);
-                    }
+                    tensor_start_t = clock();
+                    NewtonLikeMethodGetTensorVectorTest<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ),tsDims);
+                    // NewtonLikeMethodGetTensorVector<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
+                    // NewtonLikeMethodGetTensorVectorNormarizationed<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ), deviceSCV);
+                    cudaDeviceSynchronize();
+                    tensor_end_t = clock();
+                    diff_time = tensor_end_t - tensor_start_t;
+                    printf("tensor time := %lf ", diff_time / CLOCKS_PER_SEC );
+                    // 1024以下の"NUM_OF_PARABOLOID_COEFFICIENT"の最大約数を(thread数 / block)として計算させる方針で実行
+                    // 以下は正規方程式における行列の各要素を取得する関数
 
-                }
-#endif
-
-#ifndef USING_QR_DECOMPOSITION
-                //以下は、正規方程式（最小二乗法で使用）のベクトル(正規方程式：Gx = v の v)の各要素を計算する関数
-                // NewtonLikeMethodGenNormalizationVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
-                // cudaDeviceSynchronize();
-
-                // CHECK_CUSOLVER( cusolverDnSpotrf_bufferSize(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, &work_size), "Failed to get bufferSize");
-                CHECK_CUSOLVER( cusolverDnDpotrf_bufferSize(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, &work_size), "Failed to get bufferSize");
-                CHECK(cudaMalloc((void**)&work_space, sizeof(double) * work_size));
-
-                // CHECK_CUSOLVER( cusolverDnSpotrf(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, work_space, work_size, devInfo), "Failed to inverse operation for G");
-                CHECK_CUSOLVER( cusolverDnDpotrf(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, work_space, work_size, devInfo), "Failed to inverse operation for G");
-                MatrixSetUpLargeIdentityMatrix<<<grid, block>>>(invGmatrix, NUM_OF_PARABOLOID_COEFFICIENT);
-                cudaDeviceSynchronize();
-
-                // CHECK_CUSOLVER( cusolverDnSpotrs(cusolverH, uplo, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, invGmatrix, m_Rmatrix, devInfo), "Failed to get inverse Matrix G");
-                CHECK_CUSOLVER( cusolverDnDpotrs(cusolverH, uplo, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, invGmatrix, m_Rmatrix, devInfo), "Failed to get inverse Matrix G");
-
-                // 正規方程式をcuBlasで解く
-                // CHECK_CUBLAS( cublasSgemv(handle_cublas, CUBLAS_OP_N, m_Rmatrix, m_Rmatrix, &alpha, invGmatrix, m_Rmatrix, CVector, 1, &beta, ansCVector, 1),"Failed to get Estimate Input Sequences");
-                CHECK_CUBLAS( cublasDgemv(handle_cublas, CUBLAS_OP_N, m_Rmatrix, m_Rmatrix, &alpha, invGmatrix, m_Rmatrix, CVector, 1, &beta, ansCVector, 1),"Failed to get Estimate Input Sequences");
-
-#else
-                if(t==1){
-                    // CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
-                    CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
-                    // CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
-                    CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
-
-                    QR_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
-                }
-                CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
-                /* compute QR factorization */ 
-                // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
-                CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
-
-                // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
-                CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
-                CHECK(cudaDeviceSynchronize());
-
-                // CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
-                CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
-
-                CHECK(cudaDeviceSynchronize());
-
-                NewtonLikeMethodCopyVector<<<numUnknownParamQHP, 1>>>(ansCVector, CVector);
-                CHECK(cudaDeviceSynchronize());
-#endif
-
-                NewtonLikeMethodGetHessianElements<<<numUnknownParamHessian, 1>>>(HessianElements, ansCVector);
-                CHECK(cudaDeviceSynchronize());
-                // ヘシアンの上三角行列分の要素を取得
-                NewtonLikeMethodGetHessianOriginal<<<InputByHorizon, InputByHorizon>>>(Hessian, HessianElements);
-                CHECK(cudaDeviceSynchronize());
-
-                NewtonLikeMethodGetLowerTriangle<<<InputByHorizon, InputByHorizon>>>(lowerHessian, Hessian);
-                CHECK(cudaDeviceSynchronize());
-                // NewtonLikeMethodGetFullHessianLtoU<<<HORIZON, HORIZON>>>(Hessian, lowerHessian);
-                NewtonLikeMethodGetFullHessianUtoL<<<InputByHorizon, InputByHorizon>>>(lowerHessian, Hessian);
-                NewtonLikeMethodGetGradient<<<InputByHorizon, 1>>>(Gradient, ansCVector, numUnknownParamHessian);
-                MatrixMultiplyOperation<<<InputByHorizon,InputByHorizon>>>(Hessian, 2.0, lowerHessian);
-
-#ifdef WRITE_MATRIX_INFORMATION
-                if(t<100){
-                    if(t % 10 == 0){
-                        get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
-                        sprintf(name[1].name, "HessianMatrix");
-                        name[1].dimSize = InputByHorizon;
-                        CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * InputByHorizon * InputByHorizon, cudaMemcpyDeviceToHost));
-                        write_Matrix_Information(WriteHessian, &name[1], timerParam);
-                    }
-                }
-#endif
-
-#ifndef USING_QR_DECOMPOSITION
-                // CHECK_CUSOLVER( cusolverDnSpotrf_bufferSize(cusolverH, uplo, HORIZON, Hessian, HORIZON, &w_si_hessian), "Failed to get bufferSize of computing the inverse of Hessian");
-                CHECK_CUSOLVER( cusolverDnDpotrf_bufferSize(cusolverH, uplo,InputByHorizon, Hessian, InputByHorizon, &w_si_hessian), "Failed to get bufferSize of computing the inverse of Hessian");
-                CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
-                // CHECK_CUSOLVER( cusolverDnSpotrf(cusolverH, uplo, HORIZON, Hessian, HORIZON, w_sp_hessian, w_si_hessian, devInfo), "Failed to inverse operation");
-                CHECK_CUSOLVER( cusolverDnDpotrf(cusolverH, uplo, InputByHorizon, Hessian, InputByHorizon, w_sp_hessian, w_si_hessian, devInfo), "Failed to inverse operation");
-                MatrixSetUpSmallIdentityMatrix<<<InputByHorizon, InputByHorizon>>>(invHessian);
-
-                // CHECK_CUSOLVER( cusolverDnSpotrs(cusolverH, uplo, HORIZON, HORIZON, Hessian, HORIZON, invHessian, HORIZON, devInfo), "Failed to get inverse of Hessian");
-                CHECK_CUSOLVER( cusolverDnDpotrs(cusolverH, uplo, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, invHessian, InputByHorizon, devInfo), "Failed to get inverse of Hessian");
-                // 逆行列を-1倍する操作
-                MatrixMultiplyOperation<<<InputByHorizon, InputByHorizon>>>(Hessian, -1.0f, invHessian);
-                // CHECK_CUBLAS(cublasSgemv(handle_cublas, CUBLAS_OP_N, HORIZON, HORIZON, &alpha, Hessian, HORIZON, Gradient, 1, &beta, deviceTempData, 1), "Failed to get result by proposed method");
-                CHECK_CUBLAS(cublasDgemv(handle_cublas, CUBLAS_OP_N, InputByHorizon, InputByHorizon, &alpha, Hessian, InputByHorizon, Gradient, 1, &beta, deviceTempData, 1), "Failed to get result by proposed method");
-#else
-                if(t==1){
-                    // CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, HORIZON, HORIZON, Hessian, HORIZON, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
-                    CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
-                    // CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, HORIZON, nrhs, HORIZON, Hessian, HORIZON, hQR_tau, Gradient, HORIZON, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
-                    CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, InputByHorizon, nrhs, InputByHorizon, Hessian, InputByHorizon, hQR_tau, Gradient, InputByHorizon, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
                     
-                    w_si_hessian = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
-                }
-                CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
-                /* compute QR factorization */ 
+                    if(NUM_OF_PARABOLOID_COEFFICIENT < 1024){
+                        NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
+                    }else{
+                        NewtonLikeMethodGetRegularMatrixTypeB<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                        cudaDeviceSynchronize();
+                    }
+                    // NewtonLikeMethodGenNormalizationMatrix<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
 
-                // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, HORIZON, HORIZON, Hessian, HORIZON, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
-                CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
-                // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, HORIZON, nrhs, HORIZON, Hessian, HORIZON, hQR_tau, Gradient, HORIZON, w_sp_hessian, w_si_hessian, devInfo), "Failed to compute Q^T*B" );
-                CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, InputByHorizon, nrhs, InputByHorizon, Hessian, InputByHorizon, hQR_tau, Gradient, InputByHorizon, w_sp_hessian, w_si_hessian, devInfo), "Failed to compute Q^T*B" );
-                CHECK(cudaDeviceSynchronize());
+                    /*-----------------Error detect 2021.07.20----------------------------*/
+                    // Following Function has any Error (ThreadId or BlockId) --> it is required to modify original mode.
+                    // NewtonLikeMethodGenNormalEquation<<<grid, block>>>(Gmatrix, CVector, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                    // NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
+                    NewtonLikeMethodGetRegularVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
+                    // printf("hoge %d hoge\n",t);
+                    cudaDeviceSynchronize();
+                    // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
+#ifdef WRITE_MATRIX_INFORMATION
+                    if(t<100){
+                        if(t % 10 == 0){
+                            get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                            sprintf(name[0].name, "RegularMatrix");
+                            name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
+                            CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(double) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                            write_Matrix_Information(WriteRegular, &name[0], timerParam);
+                        }
+                    }else{
+                        if(t % 250 == 0){
+                            get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                            sprintf(name[0].name, "RegularMatrix");
+                            name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
+                            CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(double) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                            write_Matrix_Information(WriteRegular, &name[0], timerParam);
+                        }
 
-                // CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, HORIZON, nrhs, &m_alpha, Hessian, HORIZON, Gradient, HORIZON), "Failed to compute X = R^-1Q^T*B" );
-                CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, InputByHorizon, nrhs, &m_alpha, Hessian, InputByHorizon, Gradient, InputByHorizon), "Failed to compute X = R^-1Q^T*B" );
-                CHECK(cudaDeviceSynchronize());
-
-                NewtonLikeMethodCopyVector<<<InputByHorizon, 1>>>(deviceTempData, Gradient);
-                CHECK(cudaDeviceSynchronize());
+                    }
 #endif
-                CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(double) * InputByHorizon, cudaMemcpyDeviceToHost) );
-                CHECK(cudaDeviceSynchronize());
-                // NewtonLikeMethodInputSaturation(hostTempData, hostSCV->constraints[1], hostSCV->constraints[0]);
-                Quadrotor_Input_recalculation(hostTempData, hostSCV);
-                Quadrotor_InputSaturation(hostTempData, hostSCV);
+
+#ifndef USING_QR_DECOMPOSITION
+                    //以下は、正規方程式（最小二乗法で使用）のベクトル(正規方程式：Gx = v の v)の各要素を計算する関数
+                    // NewtonLikeMethodGenNormalizationVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
+                    // cudaDeviceSynchronize();
+
+                    // CHECK_CUSOLVER( cusolverDnSpotrf_bufferSize(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, &work_size), "Failed to get bufferSize");
+                    CHECK_CUSOLVER( cusolverDnDpotrf_bufferSize(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, &work_size), "Failed to get bufferSize");
+                    CHECK(cudaMalloc((void**)&work_space, sizeof(double) * work_size));
+
+                    // CHECK_CUSOLVER( cusolverDnSpotrf(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, work_space, work_size, devInfo), "Failed to inverse operation for G");
+                    CHECK_CUSOLVER( cusolverDnDpotrf(cusolverH, uplo, m_Rmatrix, Gmatrix, m_Rmatrix, work_space, work_size, devInfo), "Failed to inverse operation for G");
+                    MatrixSetUpLargeIdentityMatrix<<<grid, block>>>(invGmatrix, NUM_OF_PARABOLOID_COEFFICIENT);
+                    cudaDeviceSynchronize();
+
+                    // CHECK_CUSOLVER( cusolverDnSpotrs(cusolverH, uplo, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, invGmatrix, m_Rmatrix, devInfo), "Failed to get inverse Matrix G");
+                    CHECK_CUSOLVER( cusolverDnDpotrs(cusolverH, uplo, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, invGmatrix, m_Rmatrix, devInfo), "Failed to get inverse Matrix G");
+
+                    // 正規方程式をcuBlasで解く
+                    // CHECK_CUBLAS( cublasSgemv(handle_cublas, CUBLAS_OP_N, m_Rmatrix, m_Rmatrix, &alpha, invGmatrix, m_Rmatrix, CVector, 1, &beta, ansCVector, 1),"Failed to get Estimate Input Sequences");
+                    CHECK_CUBLAS( cublasDgemv(handle_cublas, CUBLAS_OP_N, m_Rmatrix, m_Rmatrix, &alpha, invGmatrix, m_Rmatrix, CVector, 1, &beta, ansCVector, 1),"Failed to get Estimate Input Sequences");
+
+#else
+                    matcalc_s_t = clock();
+                    if(t==1){
+                        // CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
+                        CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
+                        // CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                        CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+
+                        QR_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                        CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
+                    }
+                    // CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
+                    /* compute QR factorization */ 
+                    // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
+                    CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
+
+                    // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
+                    CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
+                    CHECK(cudaDeviceSynchronize());
+
+                    // CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
+                    CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
+
+                    CHECK(cudaDeviceSynchronize());
+
+                    NewtonLikeMethodCopyVector<<<numUnknownParamQHP, 1>>>(ansCVector, CVector);
+                    CHECK(cudaDeviceSynchronize());
+                    matcalc_end_t = clock();
+                    diff_time = matcalc_end_t-matcalc_s_t;
+                    printf("matrix making time := %lf\n", diff_time / CLOCKS_PER_SEC );
+#endif
+
+                    NewtonLikeMethodGetHessianElements<<<numUnknownParamHessian, 1>>>(HessianElements, ansCVector);
+                    CHECK(cudaDeviceSynchronize());
+                    // ヘシアンの上三角行列分の要素を取得
+                    NewtonLikeMethodGetHessianOriginal<<<InputByHorizon, InputByHorizon>>>(Hessian, HessianElements);
+                    CHECK(cudaDeviceSynchronize());
+
+                    NewtonLikeMethodGetLowerTriangle<<<InputByHorizon, InputByHorizon>>>(lowerHessian, Hessian);
+                    CHECK(cudaDeviceSynchronize());
+                    // NewtonLikeMethodGetFullHessianLtoU<<<HORIZON, HORIZON>>>(Hessian, lowerHessian);
+                    NewtonLikeMethodGetFullHessianUtoL<<<InputByHorizon, InputByHorizon>>>(lowerHessian, Hessian);
+                    NewtonLikeMethodGetGradient<<<InputByHorizon, 1>>>(Gradient, ansCVector, numUnknownParamHessian);
+                    MatrixMultiplyOperation<<<InputByHorizon,InputByHorizon>>>(Hessian, 2.0, lowerHessian);
+
+#ifdef WRITE_MATRIX_INFORMATION
+                    if(t<20){
+                        if(t % 1 == 0){
+                            get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                            sprintf(name[1].name, "HessianMatrix");
+                            name[1].dimSize = InputByHorizon;
+                            CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * InputByHorizon * InputByHorizon, cudaMemcpyDeviceToHost));
+                            write_Matrix_Information(WriteHessian, &name[1], timerParam);
+                        }
+                    }
+#endif
+
+#ifndef USING_QR_DECOMPOSITION
+                    // CHECK_CUSOLVER( cusolverDnSpotrf_bufferSize(cusolverH, uplo, HORIZON, Hessian, HORIZON, &w_si_hessian), "Failed to get bufferSize of computing the inverse of Hessian");
+                    CHECK_CUSOLVER( cusolverDnDpotrf_bufferSize(cusolverH, uplo,InputByHorizon, Hessian, InputByHorizon, &w_si_hessian), "Failed to get bufferSize of computing the inverse of Hessian");
+                    CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
+                    // CHECK_CUSOLVER( cusolverDnSpotrf(cusolverH, uplo, HORIZON, Hessian, HORIZON, w_sp_hessian, w_si_hessian, devInfo), "Failed to inverse operation");
+                    CHECK_CUSOLVER( cusolverDnDpotrf(cusolverH, uplo, InputByHorizon, Hessian, InputByHorizon, w_sp_hessian, w_si_hessian, devInfo), "Failed to inverse operation");
+                    MatrixSetUpSmallIdentityMatrix<<<InputByHorizon, InputByHorizon>>>(invHessian);
+
+                    // CHECK_CUSOLVER( cusolverDnSpotrs(cusolverH, uplo, HORIZON, HORIZON, Hessian, HORIZON, invHessian, HORIZON, devInfo), "Failed to get inverse of Hessian");
+                    CHECK_CUSOLVER( cusolverDnDpotrs(cusolverH, uplo, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, invHessian, InputByHorizon, devInfo), "Failed to get inverse of Hessian");
+                    // 逆行列を-1倍する操作
+                    MatrixMultiplyOperation<<<InputByHorizon, InputByHorizon>>>(Hessian, -1.0f, invHessian);
+                    // CHECK_CUBLAS(cublasSgemv(handle_cublas, CUBLAS_OP_N, HORIZON, HORIZON, &alpha, Hessian, HORIZON, Gradient, 1, &beta, deviceTempData, 1), "Failed to get result by proposed method");
+                    CHECK_CUBLAS(cublasDgemv(handle_cublas, CUBLAS_OP_N, InputByHorizon, InputByHorizon, &alpha, Hessian, InputByHorizon, Gradient, 1, &beta, deviceTempData, 1), "Failed to get result by proposed method");
+#else
+                    if(t==1){
+                        // CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, HORIZON, HORIZON, Hessian, HORIZON, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
+                        CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
+                        // CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, HORIZON, nrhs, HORIZON, Hessian, HORIZON, hQR_tau, Gradient, HORIZON, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                        CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, InputByHorizon, nrhs, InputByHorizon, Hessian, InputByHorizon, hQR_tau, Gradient, InputByHorizon, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                    
+                        w_si_hessian = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                        CHECK( cudaMalloc((void**)&w_sp_hessian, sizeof(double) * w_si_hessian) );
+                    }
                 
-                for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
-                {
-                    Proposed_F[uIndex] = hostTempData[uIndex];
-                }
-                // 提案法の最適性条件を計算->比較(vs MC解)->物理シミュレーション(by RungeKutta4.5)->結果の保存
-                // calc_Cost_Quadrotor(COST_MC, hostData, hostSCV);
-                calc_Cost_QuaternionBased_Quadrotor(COST_MC, hostData, hostSCV);
-                // calc_Cost_Quadrotor(COST_NLM, hostTempData, hostSCV);
-                calc_Cost_QuaternionBased_Quadrotor(COST_NLM, hostTempData, hostSCV);                
+                    /* compute QR factorization */ 
+
+                    // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, HORIZON, HORIZON, Hessian, HORIZON, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
+                    CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, InputByHorizon, InputByHorizon, Hessian, InputByHorizon, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
+                    // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, HORIZON, nrhs, HORIZON, Hessian, HORIZON, hQR_tau, Gradient, HORIZON, w_sp_hessian, w_si_hessian, devInfo), "Failed to compute Q^T*B" );
+                    CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, InputByHorizon, nrhs, InputByHorizon, Hessian, InputByHorizon, hQR_tau, Gradient, InputByHorizon, w_sp_hessian, w_si_hessian, devInfo), "Failed to compute Q^T*B" );
+                    CHECK(cudaDeviceSynchronize());
+
+                    // CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, HORIZON, nrhs, &m_alpha, Hessian, HORIZON, Gradient, HORIZON), "Failed to compute X = R^-1Q^T*B" );
+                    CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, InputByHorizon, nrhs, &m_alpha, Hessian, InputByHorizon, Gradient, InputByHorizon), "Failed to compute X = R^-1Q^T*B" );
+                    CHECK(cudaDeviceSynchronize());
+
+                    NewtonLikeMethodCopyVector<<<InputByHorizon, 1>>>(deviceTempData, Gradient);
+                    CHECK(cudaDeviceSynchronize());
+#endif
+                    CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(double) * InputByHorizon, cudaMemcpyDeviceToHost) );
+                    CHECK(cudaDeviceSynchronize());
+                    // NewtonLikeMethodInputSaturation(hostTempData, hostSCV->constraints[1], hostSCV->constraints[0]);
+                    // Quadrotor_Input_recalculation(hostTempData, hostSCV);
+                    Quadrotor_InputSaturation(hostTempData, hostSCV);
+                
+                    for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
+                    {
+                        Proposed_F[uIndex] = hostTempData[uIndex];
+                    }
+                    // 提案法の最適性条件を計算->比較(vs MC解)->物理シミュレーション(by RungeKutta4.5)->結果の保存
+                    // calc_Cost_Quadrotor(COST_MC, hostData, hostSCV);
+                    calc_Cost_QuaternionBased_Quadrotor(COST_MC, hostData, hostSCV);
+                    // calc_Cost_Quadrotor(COST_NLM, hostTempData, hostSCV);
+                    calc_Cost_QuaternionBased_Quadrotor(COST_NLM, hostTempData, hostSCV); 
+                }               
             }
             cudaEventRecord(stop,0);
             cudaEventSynchronize(stop);
@@ -500,25 +519,46 @@ int main(int argc, char **argv)
         {
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {
-                F_input[j] = hostTempData[j];
+                // F_input[j] = hostTempData[j];
+                F_input[j] = hostData[j];
             }
             cost_now = COST_NLM[0];
-            CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
+            CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
         }else{
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {
                 F_input[j] = hostData[j];
+                // F_input[j] = hostTempData[j];
             }
             cost_now = COST_MC[0];
             CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
         }
 
         // Runge_Kutta45_for_SecondaryOderSystem( hostSCV, F_input, interval);
-        Runge_Kutta45_Quadrotor(hostSCV, F_input, interval);
+        // Runge_Kutta45_Quadrotor(hostSCV, F_input, interval);
+        Runge_Kutta45_QuaternionBased_Quadrotor(hostSCV, F_input, interval);
+        /*if(300 <= t && t <=304)
+        {
+            hostSCV->params[1] += 0.5;
+            hostSCV->params[2] -= 0.5;
+            hostSCV->params[3] += 0.5;
+        }
+        if(600 <= t && t <= 604){
+            hostSCV->params[1] -= 0.5;
+            hostSCV->params[2] += 0.5;
+            hostSCV->params[3] -= 0.5;
+        }*/
+        if(t == 300)
+        {
+            hostSCV->state[1] += 1.0;
+            hostSCV->state[7] += 20.0;
+        }
         CHECK( cudaMemcpy(deviceSCV, hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
         fprintf(fp_input, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf\n", t * interval, F_input[0], F_input[1], F_input[2], F_input[3], MCMPC_F[0], MCMPC_F[1], MCMPC_F[2], MCMPC_F[3], Proposed_F[0], Proposed_F[1], Proposed_F[2], Proposed_F[3]);
-        fprintf(fp_state, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf\n", t * interval, hostSCV->state[0], hostSCV->state[2], hostSCV->state[4], hostSCV->state[6], hostSCV->state[7], hostSCV->state[8], hostSCV->state[1], hostSCV->state[3], hostSCV->state[5]);
-        fprintf(opco, "%lf %lf %lf %lf %lf %lf %lf %lf\n", t * interval, cost_now, COST_MC[0], COST_NLM[0], COST_MC[1], COST_NLM[1], process_gpu_time/10e3, procedure_all_time/CLOCKS_PER_SEC);
+        fprintf(fp_state, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf\n", t * interval, hostSCV->state[0], hostSCV->state[2], hostSCV->state[4], hostSCV->state[6], hostSCV->state[7], hostSCV->state[8], hostSCV->state[9], hostSCV->state[10], hostSCV->state[11], hostSCV->state[12], hostSCV->state[1], hostSCV->state[3], hostSCV->state[5]);
+        fprintf(opco, "%lf %lf %lf %lf %lf %lf %lf %lf %lf\n", t * interval, cost_now, COST_MC[0], COST_NLM[0], COST_MC[1], COST_NLM[1], COST_MC[1]-COST_NLM[1], process_gpu_time/10e3, procedure_all_time/CLOCKS_PER_SEC);
         printf("hoge\n");
     }
     if(cusolverH) cusolverDnDestroy(cusolverH);

@@ -15,7 +15,7 @@ void get_timeParam(int *tparam,int month, int day, int hour, int min, int step)
 void write_Matrix_Information(double *data, dataName *d_name, int *timeparam)
 {
     FILE *fp;
-    char filename_Temp[45];
+    char filename_Temp[60];
     sprintf(filename_Temp,"%s_%d%d_%d%d_%dstep.txt", d_name->name, timeparam[0], timeparam[1], timeparam[2], timeparam[3], timeparam[4]);
     fp = fopen(filename_Temp, "w");
     int nameSize = d_name->dimSize;

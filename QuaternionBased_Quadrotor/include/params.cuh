@@ -13,27 +13,27 @@ params.cuh
 
 #define SIM_TIME 1000
 #define ITERATIONS_MAX 20
-#define ITERATIONS 2
-#define HORIZON 18
+#define ITERATIONS 1
+#define HORIZON 14
 
 #define DIM_OF_PARAMETERS 4
-#define DIM_OF_SYSTEM_PARAM 10
+#define DIM_OF_SYSTEM_PARAM 11
 #define DIM_OF_STATES 13
 #define NUM_OF_CONSTRAINTS 6
 #define DIM_OF_WEIGHT_MATRIX 16
 #define DIM_OF_INPUT 4
 
 #define NUM_OF_SAMPLES 10000
-#define NUM_OF_ELITES 100
+#define NUM_OF_ELITES 200
 #define THREAD_PER_BLOCKS 10
 
-const double predictionInterval = 0.6;
+const double predictionInterval = 0.98;
 const double interval = 0.020; // control cycle for plant
-const int NUM_OF_PARABOLOID_COEFFICIENT = 2701;
-const int MAX_DIVISOR = 9;  //Require divisor of "NUM_OF_PARABOLOID_COEFFICIENT" less than 1024 
-const int addTermForLSM = 399; // 3321 + 179 = 3500
+const int NUM_OF_PARABOLOID_COEFFICIENT = 1653;
+const int MAX_DIVISOR = 87;  //Require divisor of "NUM_OF_PARABOLOID_COEFFICIENT" less than 1024 
+const int addTermForLSM = 847; // 3321 + 179 = 3500
 // const int InputByHorizon = 80;
-const double neighborVar = 0.25;
+const double neighborVar = 0.35;
 const double variance = 2.0; // variance used for seaching initial solution by MCMPC with Geometric Cooling
 const double Rho = 1e-6; // inverse constant values for Barrier term
 const double sRho = 1e-4;
