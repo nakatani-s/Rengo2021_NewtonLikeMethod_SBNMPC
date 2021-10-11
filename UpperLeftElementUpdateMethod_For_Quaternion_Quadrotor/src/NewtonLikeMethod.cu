@@ -246,7 +246,7 @@ __global__ void NewtonLikeMethodGetTensorVectorTest(QHP *Out, SampleInfo *In, in
     }
 }
 
-__global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,double *LH, int *indices, const IndexParams *Idx, mInputSystem mDim)
+__global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In, double *LH, int *indices, const IndexParams *Idx, mInputSystem mDim)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
     int next_indices = 0;
@@ -299,13 +299,17 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
         
         case MultiInput:
         // tensor_vetorおよびcolumn_vectorのindexを見直す(今のままでは，固定係数の箇所分だけ空の配列となってしまう。)
+        if(id == 0){
+            printf("Idx->InputByHorizonS = %d next_indices == %d\n", Idx->InputByHorizonS,next_indices);
+            printf("partial_blc_indices == %d\n", partial_blc_indices);
+        }
             for(int i = 0; i < HORIZON; i++)
             {
                 for(int j = 0; j < DIM_OF_INPUT; j++)
                 {
                     for(int k = i; k < HORIZON; k++)
                     {
-                        if(k < Idx->InputByHorizonS){
+                        if(k < PART_HORIZON){
                             if(k == i){
                                 for(int h = j; h < DIM_OF_INPUT; h++){
                          #ifdef USING_WEIGHTED_LEAST_SQUARES
@@ -313,7 +317,7 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
                                     Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
                         #else
                                     Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
-                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
                         #endif
                                     partial_blc_indices += 1;
                                     next_indices += 1;
@@ -325,7 +329,7 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
                                     Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
                         #else
                                     Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
-                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
                         #endif
                                     partial_blc_indices += 1; 
                                     next_indices += 1;
@@ -338,13 +342,13 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
                                         TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
                                         next_indices += 1;
                                     }else{
-                                        TempDifferCostValue += 2.0 * LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                        TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
                                         next_indices += 1;
                                     }
                                 }
                             }else{
-                                for(int h = j; h < DIM_OF_INPUT; h++){
-                                    TempDifferCostValue += 2.0 * LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                for(int h = 0; h < DIM_OF_INPUT; h++){
+                                    TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
                                     next_indices += 1;
                                 }
                             }
@@ -353,6 +357,7 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
                 }
             }
             Out[id].DifferCostValue = TempDifferCostValue;
+            Out[id].CostValue = In[indices[id]].LF;
 
             for(int i = 0; i < HORIZON; i++)
             {
@@ -360,10 +365,10 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
                 {
         #ifdef USING_WEIGHTED_LEAST_SQUARES
                     Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * sqrtf( In[indices[id]].WHM );
-                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].WHM;
+                    Out[id].column_vector[partial_blc_indices] =  In[indices[id]].Input[j][i] * In[indices[id]].WHM;
         #else
                     Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i];
-                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i];
+                    Out[id].column_vector[partial_blc_indices] =  In[indices[id]].Input[j][i];
         #endif
                     // next_indices += 1;
                     partial_blc_indices += 1;
@@ -371,14 +376,14 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
             }
         #ifdef USING_WEIGHTED_LEAST_SQUARES
             Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0 * sqrtf( In[indices[id]].WHM );
-            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].LF * In[indices[id]].WHM;
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].WHM;
         #else
             Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0;
-            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].LF;
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = 1.0;
         #endif
             __syncthreads();
             if(id == 0){
-                // printf("next_indices == %d\n",next_indices);
+                printf("next_indices == %d\n",next_indices);
                 printf("partial_blc_indices == %d\n", partial_blc_indices);
             }
             break;
@@ -535,6 +540,16 @@ __global__ void NewtonLikeMethodGetRegularVector(double *Vec, QHP *element, int 
     __syncthreads();
 }
 
+__global__ void NewtonLikeMethodGetRegularVectorPartial(double *Vec, QHP *element, int Sample_size)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    Vec[id] = 0.0;
+    for(int index = 0; index < Sample_size; index++)
+    {
+        Vec[id] +=  (element[index].CostValue - element[index].DifferCostValue) * element[index].column_vector[id];
+    }
+    __syncthreads();
+}
 
 
 __global__ void NewtonLikeMethodGetHessianElements(double *HessElement, double *ansVec)

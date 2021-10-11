@@ -94,10 +94,12 @@ int main(int argc, char **argv)
     numBlocks = countBlocks(NUM_OF_SAMPLES, THREAD_PER_BLOCKS);
 
     /* Fitting用インデックスパラメータの取得 */
-    IndexParams *gIdx;
+    IndexParams *gIdx, *devIdx;
     gIdx = (IndexParams*)malloc(sizeof(IndexParams));
     set_IndexParams( gIdx ); 
     const IndexParams *Idx = gIdx;
+    CHECK(cudaMalloc(&devIdx, sizeof(IndexParams)));
+    CHECK(cudaMemcpy(devIdx, gIdx, sizeof(IndexParams), cudaMemcpyHostToDevice));
     /*unsigned int paramsSizeQuadHyperPlane;
     const int InputByHorizon = HORIZON * DIM_OF_INPUT;
     const int PartIByH = PART_HORIZON * DIM_OF_INPUT; 
@@ -113,7 +115,7 @@ int main(int argc, char **argv)
     paramsSizeQuadHyperPlane = paramsSizeQuadHyperPlane + addTermForLSM;*/
 
     dim3 block_S(MAX_DIVISOR_S);
-    dim3 grid_S((Idx->num_UKPrm_QC_S + block_S.x -1), Idx->num_UKPrm_QC_S);
+    dim3 grid_S((Idx->num_UKPrm_QC_S + block_S.x -1)/ block_S.x, Idx->num_UKPrm_QC_S);
     
     dim3 block_L(MAX_DIVISOR);
     // dim3 block(1,1);
@@ -156,7 +158,7 @@ int main(int argc, char **argv)
     double *Gradient;
     /* 1st ステップでヘッセを推定するのに使用する配列群のMalloc <-- 要cudaFree after 1st Estimation */ 
     CHECK( cudaMalloc(&Hessian, sizeof(double) * Idx->dim_H_L));
-    CHECK( cudaMalloc(&lowerHessian, sizeof(double) * Idx->dim_H_S));
+    CHECK( cudaMalloc(&lowerHessian, sizeof(double) * Idx->dim_H_L));
     CHECK( cudaMalloc(&Gradient, sizeof(double) * Idx->InputByHorizonL));
 
     /* 最小２乗法で２次超曲面を求める際に使用する配列の宣言 */
@@ -233,6 +235,7 @@ int main(int argc, char **argv)
 #ifdef USING_QR_DECOMPOSITION
     // double *QR_work_space = NULL;
     double *ws_QR_operation = NULL;
+    double *ws_blc_QR_operation = NULL;
     int geqrf_work_size = 0;
     int ormqr_work_size = 0;
     int QR_work_size = 0;
@@ -247,7 +250,7 @@ int main(int argc, char **argv)
     cublasDiagType_t cub_diag = CUBLAS_DIAG_NON_UNIT;
     CHECK(cudaMalloc((void**)&QR_tau, sizeof(double) * Idx->num_UKPrm_QC_L));
     CHECK(cudaMalloc((void**)&hQR_tau, sizeof(double) * Idx->InputByHorizonL));
-    CHECK(cudaMalloc((void**)&blc_QR_tau, sizeof(double) * Idx->InputByHorizonS));
+    CHECK(cudaMalloc((void**)&blc_QR_tau, sizeof(double) * Idx->num_UKPrm_QC_S));
 #endif
 
     mInputSystem tsDims = MultiInput;
@@ -296,6 +299,14 @@ int main(int argc, char **argv)
                 /* 振子系失敗の原因は恐らく，多峰性なので，振り上げ方向をペナルティ化すれば，初期ヘシアンは構成できるかも　＝＝　もし不可ならLQRを参照とする */
                 if(iter == ITERATIONS_MAX -1)
                 {
+                    var = neighborVar;
+                    MCMPC_QuaternionBased_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                    // MCMPC_Quadrotor<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                    // MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                    cudaDeviceSynchronize();
+                    thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
+                    thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
+
                     NewtonLikeMethodGetTensorVectorTest<<< qhpBlocks_L, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ),tsDims);
                     cudaDeviceSynchronize();
                     if(Idx->num_UKPrm_QC_L < 1024){
@@ -320,12 +331,34 @@ int main(int argc, char **argv)
                     // CHECK(cudaDeviceSynchronize());
                     NewtonLikeMethodGetHessianOriginal<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(Hessian, CVector);
                     CHECK(cudaDeviceSynchronize());
+#ifdef WRITE_MATRIX_INFORMATION     
+                    get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t+1200);
+                    sprintf(name[1].name, "HessianMatrix");
+                    name[1].dimSize = Idx->InputByHorizonL;
+                    CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * Idx->InputByHorizonL * Idx->InputByHorizonL, cudaMemcpyDeviceToHost));
+                    write_Matrix_Information(WriteHessian, &name[1], timerParam);
+#endif
                     NewtonLikeMethodGetLowerTriangle<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(lowerHessian, Hessian);
                     CHECK(cudaDeviceSynchronize());
+#ifdef WRITE_MATRIX_INFORMATION     
+                    get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t+1201);
+                    sprintf(name[1].name, "HessianMatrix");
+                    name[1].dimSize = Idx->InputByHorizonL;
+                    CHECK(cudaMemcpy(WriteHessian, lowerHessian, sizeof(double) * Idx->InputByHorizonL * Idx->InputByHorizonL, cudaMemcpyDeviceToHost));
+                    write_Matrix_Information(WriteHessian, &name[1], timerParam);
+#endif
                     // NewtonLikeMethodGetFullHessianLtoU<<<HORIZON, HORIZON>>>(Hessian, lowerHessian);
                     NewtonLikeMethodGetFullHessianUtoL<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(lowerHessian, Hessian);
                     NewtonLikeMethodGetGradient<<<Idx->InputByHorizonL, 1>>>(Gradient, CVector, Idx->num_UKPrm_H_L);
                     MatrixMultiplyOperation<<<Idx->InputByHorizonL,Idx->InputByHorizonL>>>(Hessian, 2.0, lowerHessian);
+#ifdef WRITE_MATRIX_INFORMATION     
+                    get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                    sprintf(name[1].name, "HessianMatrix");
+                    name[1].dimSize = Idx->InputByHorizonL;
+                    CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * Idx->InputByHorizonL * Idx->InputByHorizonL, cudaMemcpyDeviceToHost));
+                    write_Matrix_Information(WriteHessian, &name[1], timerParam);
+#endif
+
                     CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, Idx->InputByHorizonL, Idx->InputByHorizonL, Hessian, Idx->InputByHorizonL, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
                     CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, Idx->InputByHorizonL, nrhs, Idx->InputByHorizonL, Hessian, Idx->InputByHorizonL, hQR_tau, Gradient, Idx->InputByHorizonL, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
                     w_si_hessian = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
@@ -343,6 +376,12 @@ int main(int argc, char **argv)
                     cudaFree(Gmatrix);
                     cudaFree(deviceQHP);
                     cudaFree(QR_tau);
+                    cudaFree(ws_QR_operation);
+                    CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(double) * Idx->InputByHorizonL, cudaMemcpyDeviceToHost) );
+                    CHECK(cudaDeviceSynchronize());
+                    // NewtonLikeMethodInputSaturation(hostTempData, hostSCV->constraints[1], hostSCV->constraints[0]);
+                    // Quadrotor_Input_recalculation(hostTempData, hostSCV);
+                    Quadrotor_InputSaturation(hostTempData, hostSCV);
                     // cudaFree(hQR_tau);
                     // invGmatrix, ansCVector等の処置は検討（実は，要らない？連立方程式の演算を全てQR分解で賄えば，結構な配列を削減できる）
                 }
@@ -402,7 +441,7 @@ int main(int argc, char **argv)
                     // イメージとしては，N×N相当のindexまでは，tensorVectorを取得，以降は，CVectorとInputSeqからL(x,u,a)を計算する
                     // 現在の処理で，すでに入力時系列毎の処理にしているので、differLみたいなのをDataStructuresに追加かな？
                     // NewtonLikeMethodGetTensorVectorTest<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ),tsDims);
-                    NewtonLikeMethodGetTensorVectorPartial<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(devicePartQHP, deviceSampleInfo, CVector, thrust::raw_pointer_cast( indices_device_vec.data() ), Idx,tsDims);
+                    NewtonLikeMethodGetTensorVectorPartial<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(devicePartQHP, deviceSampleInfo, CVector, thrust::raw_pointer_cast( indices_device_vec.data() ), devIdx,tsDims);
                     cudaDeviceSynchronize();
                     tensor_end_t = clock();
                     diff_time = tensor_end_t - tensor_start_t;
@@ -415,13 +454,13 @@ int main(int argc, char **argv)
                         cudaDeviceSynchronize();
                     }
     
-                    NewtonLikeMethodGetRegularVector<<<Idx->num_UKPrm_QC_S, 1>>>(PartCVector, devicePartQHP, Idx->sz_LCLsamples_S);
+                    NewtonLikeMethodGetRegularVectorPartial<<<Idx->num_UKPrm_QC_S, 1>>>(PartCVector, devicePartQHP, Idx->sz_LCLsamples_S);
                     // printf("hoge %d hoge\n",t);
                     cudaDeviceSynchronize();
                     // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
 #ifdef WRITE_MATRIX_INFORMATION
                     if(t<100){
-                        if(t % 10 == 0){
+                        if(t % 1 == 0){
                             get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                             sprintf(name[0].name, "RegularMatrix");
                             name[0].dimSize = Idx->num_UKPrm_QC_S;
@@ -435,12 +474,14 @@ int main(int argc, char **argv)
                         CHECK_CUSOLVER( cusolverDnDgeqrf_bufferSize(cusolverH, mS_Rmatrix, mS_Rmatrix, PartGmatrix, mS_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
                         CHECK_CUSOLVER( cusolverDnDormqr_bufferSize(cusolverH, side, trans, mS_Rmatrix, nrhs, mS_Rmatrix, PartGmatrix, mS_Rmatrix, blc_QR_tau, PartCVector, mS_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
                         QR_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
-                        CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(double) * QR_work_size) );
+                        /*-----Error Detect -----*/
+                        printf("index == %d\n",QR_work_size);
+                        CHECK( cudaMalloc((void**)&ws_blc_QR_operation, sizeof(double) * QR_work_size) );
                     }
                     /* compute QR factorization */ 
-                    CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, mS_Rmatrix, mS_Rmatrix, PartGmatrix, mS_Rmatrix, blc_QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
+                    CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, mS_Rmatrix, mS_Rmatrix, PartGmatrix, mS_Rmatrix, blc_QR_tau, ws_blc_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
                     
-                    CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, mS_Rmatrix, nrhs, mS_Rmatrix, PartGmatrix, mS_Rmatrix, blc_QR_tau, PartCVector, mS_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
+                    CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, mS_Rmatrix, nrhs, mS_Rmatrix, PartGmatrix, mS_Rmatrix, blc_QR_tau, PartCVector, mS_Rmatrix, ws_blc_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
                     CHECK(cudaDeviceSynchronize());
                     
                     CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, mS_Rmatrix, nrhs, &alpha, PartGmatrix, mS_Rmatrix, PartCVector, mS_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
@@ -451,7 +492,7 @@ int main(int argc, char **argv)
                     
                     CHECK(cudaDeviceSynchronize());
                     // ヘシアンの上三角行列分の要素を取得
-                    NewtonLikeMethodGetBLCHessian<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(Hessian, PartCVector, CVector, Idx);
+                    NewtonLikeMethodGetBLCHessian<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(Hessian, PartCVector, CVector, devIdx);
                     CHECK(cudaDeviceSynchronize());
 
                     NewtonLikeMethodGetLowerTriangle<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(lowerHessian, Hessian);
@@ -463,6 +504,16 @@ int main(int argc, char **argv)
 
 #ifdef WRITE_MATRIX_INFORMATION
                     if(t<20){
+                        if(t % 1 == 0){
+                            get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                            sprintf(name[1].name, "HessianMatrix");
+                            name[1].dimSize = Idx->InputByHorizonL;
+                            CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * Idx->InputByHorizonL * Idx->InputByHorizonL, cudaMemcpyDeviceToHost));
+                            write_Matrix_Information(WriteHessian, &name[1], timerParam);
+                        }
+                    }
+
+                    if(700<t && t<750){
                         if(t % 1 == 0){
                             get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                             sprintf(name[1].name, "HessianMatrix");
@@ -525,12 +576,12 @@ int main(int argc, char **argv)
         {
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {
-                // F_input[j] = hostTempData[j];
-                F_input[j] = hostData[j];
+                F_input[j] = hostTempData[j];
+                // F_input[j] = hostData[j];
             }
             cost_now = COST_NLM[0];
-            // CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
-            CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * Idx->InputByHorizonL, cudaMemcpyHostToDevice) );
+            CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * Idx->InputByHorizonL, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * Idx->InputByHorizonL, cudaMemcpyHostToDevice) );
         }else{
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {

@@ -351,7 +351,7 @@ int main(int argc, char **argv)
                     cudaDeviceSynchronize();
                     // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
 #ifdef WRITE_MATRIX_INFORMATION
-                    if(t<100){
+                    if(t<1){
                         if(t % 10 == 0){
                             get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                             sprintf(name[0].name, "RegularMatrix");
@@ -360,7 +360,7 @@ int main(int argc, char **argv)
                             write_Matrix_Information(WriteRegular, &name[0], timerParam);
                         }
                     }else{
-                        if(t % 250 == 0){
+                        if(t % 1000 == 0){
                             get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                             sprintf(name[0].name, "RegularMatrix");
                             name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
@@ -447,6 +447,16 @@ int main(int argc, char **argv)
                             write_Matrix_Information(WriteHessian, &name[1], timerParam);
                         }
                     }
+
+                    if(750<t && t<800){
+                        if(t % 1 == 0){
+                            get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                            sprintf(name[1].name, "HessianMatrix");
+                            name[1].dimSize = InputByHorizon;
+                            CHECK(cudaMemcpy(WriteHessian, Hessian, sizeof(double) * InputByHorizon * InputByHorizon, cudaMemcpyDeviceToHost));
+                            write_Matrix_Information(WriteHessian, &name[1], timerParam);
+                        }
+                    }
 #endif
 
 #ifndef USING_QR_DECOMPOSITION
@@ -519,12 +529,12 @@ int main(int argc, char **argv)
         {
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {
-                // F_input[j] = hostTempData[j];
-                F_input[j] = hostData[j];
+                F_input[j] = hostTempData[j];
+                // F_input[j] = hostData[j];
             }
             cost_now = COST_NLM[0];
-            // CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
-            CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
+            CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceData, hostData, sizeof(double) * InputByHorizon, cudaMemcpyHostToDevice) );
         }else{
             for(int j = 0; j < DIM_OF_INPUT; j++)
             {

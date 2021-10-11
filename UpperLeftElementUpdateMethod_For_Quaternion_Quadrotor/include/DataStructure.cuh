@@ -23,6 +23,7 @@ typedef struct{
     double tensor_vector[NUM_OF_PARABOLOID_COEFFICIENT_L];
     double column_vector[NUM_OF_PARABOLOID_COEFFICIENT_L];
     double QplaneValue;
+    double CostValue;
     double DifferCostValue;
 }QHP; // QHP := Quadratic Hyper Plane()
 

@@ -36,6 +36,8 @@ __global__ void NewtonLikeMethodGetRegularMatrix(double *Mat, QHP *element, int 
 __global__ void NewtonLikeMethodGetRegularMatrixTypeB(double *Mat, QHP *element, int Sample_size, int Ydimention);
 __global__ void NewtonLikeMethodGetRegularVector(double *Vec, QHP *element, int Sample_size);
 
+__global__ void NewtonLikeMethodGetRegularVectorPartial(double *Vec, QHP *element, int Sample_size);
+
 // 最小二乗法の結果からヘシアンだけ取り出すための関数群
 __global__ void NewtonLikeMethodGetHessianElements(double *HessElement, double *ansVec);
 __global__ void NewtonLikeMethodGetHessianOriginal(double *Hessian, double *HessianElements);
