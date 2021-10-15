@@ -134,6 +134,16 @@ int main(int argc, char **argv)
     name = (dataName*)malloc(sizeof(dataName)*5);
 #endif
 
+#ifdef READ_LQR_MATRIX
+    double *part_of_CVector, *d_CVectorFromLQR;
+    part_of_CVector = (double *)malloc(sizeof(double)*Idx->num_UKPrm_H_L);
+    CHECK(cudaMalloc(&d_CVectorFromLQR, sizeof(double) * Idx->num_UKPrm_H_L));
+    sprintf(name[2].inputfile, "HessianFromLQR.csv");
+    name[2].dimSize = Idx->num_UKPrm_H_L;
+    resd_InitSolution_Input(part_of_CVector, &name[2]);
+    CHECK(cudaMemcpy(d_CVectorFromLQR, part_of_CVector, sizeof(double) * Idx->num_UKPrm_H_L, cudaMemcpyHostToDevice));
+#endif
+
     /* MCMPC用の乱数生成用のseedを生成する */
     curandState *deviceRandomSeed;
     cudaMalloc((void **)&deviceRandomSeed, randomNums * sizeof(curandState));
@@ -326,8 +336,13 @@ int main(int argc, char **argv)
                     CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
                     CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
                     CHECK(cudaDeviceSynchronize());
+                    matcalc_s_t = clock();
                     CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
                     CHECK(cudaDeviceSynchronize());
+                    matcalc_end_t = clock();
+                    diff_time = matcalc_end_t-matcalc_s_t;
+                    printf("matrix making time := %lf\n", diff_time / CLOCKS_PER_SEC );
+                    sleep(1);
                     // CHECK(cudaDeviceSynchronize());
                     NewtonLikeMethodGetHessianOriginal<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(Hessian, CVector);
                     CHECK(cudaDeviceSynchronize());
@@ -390,6 +405,10 @@ int main(int argc, char **argv)
                 calc_Cost_QuaternionBased_Quadrotor(COST_NLM, hostTempData, hostSCV); 
                 // calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol);
                 // printf("cost :: %lf   KKT_Error :: %lf\n", optimumConditions[0], optimumConditions[1]);
+#ifdef READ_LQR_MATRIX
+                NewtonLikeMethodCopyVector<<<Idx->num_UKPrm_H_L,1>>>(CVector, d_CVectorFromLQR);
+                CHECK(cudaDeviceSynchronize());
+#endif
             }
             /*name[1].dimSize = HORIZON;
             sprintf(name[1].name,"InitInputData.txt");
@@ -419,6 +438,7 @@ int main(int argc, char **argv)
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
                 // weighted_mean_multiInput_Quadrotor(hostData, NUM_OF_ELITES, hostEliteSampleInfo, hostSCV);
                 weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
+                // IT_weighted_mean_multiInput(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 // weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++)
                 {
@@ -491,6 +511,7 @@ int main(int argc, char **argv)
                     printf("matrix making time := %lf\n", diff_time / CLOCKS_PER_SEC );
                     
                     CHECK(cudaDeviceSynchronize());
+                    matcalc_s_t = clock();
                     // ヘシアンの上三角行列分の要素を取得
                     NewtonLikeMethodGetBLCHessian<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(Hessian, PartCVector, CVector, devIdx);
                     CHECK(cudaDeviceSynchronize());
@@ -501,7 +522,9 @@ int main(int argc, char **argv)
                     NewtonLikeMethodGetFullHessianUtoL<<<Idx->InputByHorizonL, Idx->InputByHorizonL>>>(lowerHessian, Hessian);
                     NewtonLikeMethodGetGradient<<<Idx->InputByHorizonL, 1>>>(Gradient, PartCVector, Idx->num_UKPrm_H_S);
                     MatrixMultiplyOperation<<<Idx->InputByHorizonL,Idx->InputByHorizonL>>>(Hessian, 2.0, lowerHessian);
-
+                    matcalc_end_t = clock();
+                    diff_time = matcalc_end_t-matcalc_s_t;
+                    printf("Hessian making time := %lf\n", diff_time / CLOCKS_PER_SEC );
 #ifdef WRITE_MATRIX_INFORMATION
                     if(t<20){
                         if(t % 1 == 0){
@@ -535,6 +558,7 @@ int main(int argc, char **argv)
                     }*/
 
                     /* compute QR factorization */ 
+                    matcalc_s_t = clock();
                     CHECK_CUSOLVER( cusolverDnDgeqrf(cusolverH, Idx->InputByHorizonL, Idx->InputByHorizonL, Hessian, Idx->InputByHorizonL, hQR_tau, w_sp_hessian, w_si_hessian, devInfo),"Failed to compute QR factorization" );
                     CHECK_CUSOLVER( cusolverDnDormqr(cusolverH, side, trans, Idx->InputByHorizonL, nrhs, Idx->InputByHorizonL, Hessian, Idx->InputByHorizonL, hQR_tau, Gradient, Idx->InputByHorizonL, w_sp_hessian, w_si_hessian, devInfo), "Failed to compute Q^T*B" );
                     CHECK(cudaDeviceSynchronize());
@@ -542,6 +566,9 @@ int main(int argc, char **argv)
                     // CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, HORIZON, nrhs, &m_alpha, Hessian, HORIZON, Gradient, HORIZON), "Failed to compute X = R^-1Q^T*B" );
                     CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, Idx->InputByHorizonL, nrhs, &m_alpha, Hessian, Idx->InputByHorizonL, Gradient, Idx->InputByHorizonL), "Failed to compute X = R^-1Q^T*B" );
                     CHECK(cudaDeviceSynchronize());
+                    matcalc_end_t = clock();
+                    diff_time = matcalc_end_t-matcalc_s_t;
+                    printf("inverseOperationForHessian := %lf\n", diff_time / CLOCKS_PER_SEC );
 
                     NewtonLikeMethodCopyVector<<<Idx->InputByHorizonL, 1>>>(deviceTempData, Gradient);
                     CHECK(cudaDeviceSynchronize());

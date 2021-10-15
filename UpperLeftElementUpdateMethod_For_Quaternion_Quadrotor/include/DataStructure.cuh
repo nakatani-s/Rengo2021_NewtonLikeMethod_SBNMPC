@@ -13,6 +13,7 @@ typedef struct{
     double LF;
     double W;
     double WHM;
+    double IT_weight;
     double Input[DIM_OF_INPUT][HORIZON];
     double tolerance[HORIZON];
     double dHdu[HORIZON];

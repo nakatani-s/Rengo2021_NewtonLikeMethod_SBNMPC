@@ -69,9 +69,46 @@ void weighted_mean_multiInput(double *Output, int num_elite, SampleInfo *hInfo)
                     temp[U_ID] += (hInfo[k].W * hInfo[k].Input[uIndex][i]) / totalWeight;
                 }
             }
-            if(isnan(temp[U_ID]))
+            if(isnan(temp[U_ID])||temp[U_ID] == 0.0)
             {
-                Output[U_ID] = 0.0;
+                Output[U_ID] = hInfo[0].Input[uIndex][i];
+            }else{
+                Output[U_ID] = temp[U_ID];
+            }
+        }
+    }
+}
+
+void IT_weighted_mean_multiInput(double *Output, int num_elite, SampleInfo *hInfo)
+{
+    double totalWeight = 0.0;
+    int num_eff_sample = 0;
+    double temp[HORIZON * DIM_OF_INPUT] = { };
+    for(int i = 0; i < num_elite; i++){
+        // printf("P(w) / q(w) := %lf / %lf >>> %lf\n",hInfo[i].W , hInfo[i].IT_weight,hInfo[i].W / hInfo[i].IT_weight);
+        if(isnan(hInfo[i].W / hInfo[i].IT_weight)|| hInfo[i].IT_weight < 1e-4){
+            totalWeight += 0.0;
+        }else{
+            totalWeight += hInfo[i].W / hInfo[i].IT_weight;
+            num_eff_sample += 1;
+        }
+    }
+
+    int U_ID;
+    for(int i = 0; i < HORIZON; i++){
+        for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++){
+            U_ID = i * DIM_OF_INPUT + uIndex;
+            for(int k = 0; k < num_elite; k++){
+                if(isnan(hInfo[k].W / hInfo[i].IT_weight)||hInfo[k].IT_weight < 1e-4)
+                {
+                    temp[U_ID] += 0.0;
+                }else{
+                    temp[U_ID] += ((hInfo[k].W / hInfo[k].IT_weight) * hInfo[k].Input[uIndex][i]) / totalWeight;
+                }
+            }
+            if(isnan(temp[U_ID])||temp[U_ID] == 0.0)
+            {
+                Output[U_ID] = hInfo[0].Input[uIndex][i];
             }else{
                 Output[U_ID] = temp[U_ID];
             }
@@ -154,6 +191,7 @@ __global__ void getEliteSampleInfo_multiInput(SampleInfo *Elite, SampleInfo *All
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
     Elite[id].W = All[indices[id]].W;
     Elite[id].L = All[indices[id]].L;
+    Elite[id].IT_weight = All[indices[id]].IT_weight;
     for(int i = 0; i < HORIZON; i++)
     {
         for(int uIndex = 0; uIndex < DIM_OF_INPUT; uIndex++){
@@ -525,6 +563,7 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
     Info[id].WHM = HM_COST;
     cost_vec[id] = totalCost;
     int uIndex;
+    double IT_ws = 0.0;
     for(int index = 0; index < HORIZON; index++){
         for(int id_input = 0; id_input < DIM_OF_INPUT; id_input++)
         {
@@ -534,8 +573,17 @@ __global__ void MCMPC_QuaternionBased_Quadrotor( SystemControlVariable *SCV, dou
             }else{
                 Info[id].Input[id_input][index] = u[uIndex];
             }*/
-            Info[id].Input[id_input][index] = u[uIndex]; 
+            Info[id].Input[id_input][index] = u[uIndex];
+            IT_ws += (1/variance) * (u[uIndex]-mean[uIndex]) * (u[uIndex]-mean[uIndex]);
         }
     }
+    /*if( 150 < IT_ws ){
+        Info[id].IT_weight = exp(-IT_ws/(2*DIM_OF_INPUT*HORIZON));
+    }else{
+        Info[id].IT_weight = exp(-IT_ws/2);
+    }*/
+    Info[id].IT_weight = exp(-IT_ws/(2*DIM_OF_INPUT*HORIZON));
+    // Info[id].IT_weight = exp(-IT_ws/2);
+    // Info[id].IT_weight = 1.0;
     __syncthreads();
 }
