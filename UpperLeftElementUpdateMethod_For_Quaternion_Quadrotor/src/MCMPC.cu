@@ -69,9 +69,10 @@ void weighted_mean_multiInput(double *Output, int num_elite, SampleInfo *hInfo)
                     temp[U_ID] += (hInfo[k].W * hInfo[k].Input[uIndex][i]) / totalWeight;
                 }
             }
-            if(isnan(temp[U_ID])||temp[U_ID] == 0.0)
+            if(isnan(temp[U_ID]))
             {
-                Output[U_ID] = hInfo[0].Input[uIndex][i];
+                // Output[U_ID] = hInfo[0].Input[uIndex][i];
+                Output[U_ID] = 0.0;
             }else{
                 Output[U_ID] = temp[U_ID];
             }

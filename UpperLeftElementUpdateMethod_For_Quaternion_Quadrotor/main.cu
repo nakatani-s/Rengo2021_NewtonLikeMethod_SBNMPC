@@ -174,9 +174,13 @@ int main(int argc, char **argv)
     /* 最小２乗法で２次超曲面を求める際に使用する配列の宣言 */
     double *PartGmatrix, *PartCVector;
     double *Gmatrix, *CVector;
+    double *PartTensortA, *PartTensortB, *PartTensortL;
 
     /*  2nd ステップ以降、ヘシアンの部分要素をアップデートする際に使用する2次超曲面のための配列群 */ 
     CHECK( cudaMalloc(&PartCVector, sizeof(double) * Idx->num_UKPrm_QC_S ));
+    CHECK( cudaMalloc(&PartTensortA, sizeof(double) * Idx->num_UKPrm_QC_S * Idx->sz_LCLsamples_S));
+    CHECK( cudaMalloc(&PartTensortB, sizeof(double) * Idx->num_UKPrm_QC_S * Idx->sz_LCLsamples_S));
+    CHECK( cudaMalloc(&PartTensortL, sizeof(double) * Idx->sz_LCLsamples_S) );
     CHECK( cudaMalloc(&PartGmatrix, sizeof(double) * Idx->pow_nUKPrm_QC_S));
 
     /* 1stステップで求める２次超曲面に関連する配列群のMalloc <-- 要cudaFree after 1st Estimation ended */ 
@@ -455,28 +459,39 @@ int main(int argc, char **argv)
                     thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                     thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
-                    tensor_start_t = clock();
+                    
                     // 2021.10.6修正開始
                     // 方針：TensorVector取得のところで，L(x,u)- constant_L(x,u,a)を計算しておく
                     // イメージとしては，N×N相当のindexまでは，tensorVectorを取得，以降は，CVectorとInputSeqからL(x,u,a)を計算する
                     // 現在の処理で，すでに入力時系列毎の処理にしているので、differLみたいなのをDataStructuresに追加かな？
                     // NewtonLikeMethodGetTensorVectorTest<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ),tsDims);
-                    NewtonLikeMethodGetTensorVectorPartial<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(devicePartQHP, deviceSampleInfo, CVector, thrust::raw_pointer_cast( indices_device_vec.data() ), devIdx,tsDims);
+                    // NewtonLikeMethodGetTensorVectorPartial<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(devicePartQHP, deviceSampleInfo, CVector, thrust::raw_pointer_cast( indices_device_vec.data() ), devIdx,tsDims);
+                    NewtonLikeMethodGetTensorVectorPartialDirect<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(devicePartQHP, PartTensortA, PartTensortB, deviceSampleInfo, CVector, thrust::raw_pointer_cast( indices_device_vec.data() ), devIdx,tsDims);
                     cudaDeviceSynchronize();
+                    NewtonLikeMethodGetTensorVectorNoIndex<<< qhpBlocks_S, THREAD_PER_BLOCKS>>>(PartTensortL, devicePartQHP, devIdx);
+                    
+                    tensor_start_t = clock();
+                    if(Idx->num_UKPrm_QC_S < 1024){
+                        // transpose 処理を無くすと早くなるか？
+                        CHECK_CUBLAS( cublasDgemm(handle_cublas, trans_N, trans, Idx->num_UKPrm_QC_S, Idx->num_UKPrm_QC_S, Idx->sz_LCLsamples_S, &alpha, PartTensortA, Idx->num_UKPrm_QC_S, PartTensortB, Idx->num_UKPrm_QC_S, &beta, PartGmatrix, Idx->num_UKPrm_QC_S), "TensorOperation Failed");
+                        // NewtonLikeMethodGetRegularMatrix<<<Idx->num_UKPrm_QC_S, Idx->num_UKPrm_QC_S>>>(PartGmatrix, devicePartQHP, Idx->sz_LCLsamples_S);
+                        // NewtonLikeMethodGetRegularMatrixTypeB<<<grid_S, block_S>>>(PartGmatrix, devicePartQHP, Idx->sz_LCLsamples_S, Idx->num_UKPrm_QC_S);
+                        cudaDeviceSynchronize();
+                    }else{
+                        CHECK_CUBLAS( cublasDgemm(handle_cublas, trans_N, trans, Idx->num_UKPrm_QC_S, Idx->num_UKPrm_QC_S, Idx->sz_LCLsamples_S, &alpha, PartTensortA, Idx->num_UKPrm_QC_S, PartTensortB, Idx->num_UKPrm_QC_S, &beta, PartGmatrix, Idx->num_UKPrm_QC_S), "TensorOperation Failed");
+                        // NewtonLikeMethodGetRegularMatrixTypeB<<<grid_S, block_S>>>(PartGmatrix, devicePartQHP, Idx->sz_LCLsamples_S, Idx->num_UKPrm_QC_S);
+                        cudaDeviceSynchronize();
+                    }
+                    
                     tensor_end_t = clock();
                     diff_time = tensor_end_t - tensor_start_t;
                     printf("tensor time := %lf ", diff_time / CLOCKS_PER_SEC );
-
-                    if(Idx->num_UKPrm_QC_S < 1024){
-                        NewtonLikeMethodGetRegularMatrix<<<Idx->num_UKPrm_QC_S, Idx->num_UKPrm_QC_S>>>(PartGmatrix, devicePartQHP, Idx->sz_LCLsamples_S);
-                    }else{
-                        NewtonLikeMethodGetRegularMatrixTypeB<<<grid_S, block_S>>>(PartGmatrix, devicePartQHP, Idx->sz_LCLsamples_S, Idx->num_UKPrm_QC_S);
-                        cudaDeviceSynchronize();
-                    }
-    
-                    NewtonLikeMethodGetRegularVectorPartial<<<Idx->num_UKPrm_QC_S, 1>>>(PartCVector, devicePartQHP, Idx->sz_LCLsamples_S);
+                    // NewtonLikeMethodGetRegularVectorPartial<<<Idx->num_UKPrm_QC_S, 1>>>(PartCVector, devicePartQHP, Idx->sz_LCLsamples_S);
+                    // CHECK_CUBLAS( cublasDtrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, Idx->InputByHorizonL, nrhs, &m_alpha, Hessian, Idx->InputByHorizonL, Gradient, Idx->InputByHorizonL), "Failed to compute X = R^-1Q^T*B" );
+                    CHECK_CUBLAS( cublasDgemm(handle_cublas, trans_N, trans, Idx->num_UKPrm_QC_S, 1, Idx->sz_LCLsamples_S, &alpha, PartTensortA, Idx->num_UKPrm_QC_S, PartTensortL, 1, &beta, PartCVector, Idx->num_UKPrm_QC_S), "TensorOperation Failed");
                     // printf("hoge %d hoge\n",t);
                     cudaDeviceSynchronize();
+
                     // NewtonLikeMethodCopyTensorVector<<<grid, block>>>(Gmatrix, deviceQHP, NUM_OF_PARABOLOID_COEFFICIENT);
 #ifdef WRITE_MATRIX_INFORMATION
                     if(t<100){

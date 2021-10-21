@@ -393,6 +393,171 @@ __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,
     }
 }
 
+__global__ void NewtonLikeMethodGetTensorVectorPartialDirect(QHP *Out, double *tensorA, double *tensorB, SampleInfo *In, double *LH, int *indices, const IndexParams *Idx, mInputSystem mDim)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    int next_indices = 0;
+    int partial_blc_indices = 0;
+    double TempDifferCostValue;
+    switch(mDim)
+    {
+        case SingleInput:
+        
+            for(int i = 0; i < HORIZON; i++)
+            {
+                for(int j = i; j < HORIZON; j++)
+                {
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+                    Out[id].tensor_vector[next_indices] = In[indices[id]].Input[0][i] * In[indices[id]].Input[0][j] * sqrtf( In[indices[id]].WHM );
+        
+                    Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[0][i] * In[indices[id]].Input[0][j] * In[indices[id]].WHM;
+        
+        #else
+                    Out[id].tensor_vector[next_indices] = In[indices[id]].Input[0][i] * In[indices[id]].Input[0][j];
+        
+                    Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[0][i] * In[indices[id]].Input[0][j];
+        
+        #endif
+                    next_indices += 1;
+                }
+            }
+            for(int i = 0; i < HORIZON; i++)
+            {
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[0][i] * sqrtf( In[indices[id]].WHM );
+                Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[i] * In[indices[id]].WHM;
+        
+        #else
+                Out[id].tensor_vector[next_indices] = In[indices[id]].Input[0][i];
+                Out[id].column_vector[next_indices] = In[indices[id]].L * In[indices[id]].Input[0][i];
+        #endif
+                next_indices += 1;
+            }
+        
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+            Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0 * sqrtf( In[indices[id]].WHM );
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].L * In[indices[id]].WHM;
+        #else
+            Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0;
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].L; 
+        #endif
+            __syncthreads();
+            break;
+        
+        case MultiInput:
+        // tensor_vetorおよびcolumn_vectorのindexを見直す(今のままでは，固定係数の箇所分だけ空の配列となってしまう。)
+        if(id == 0){
+            printf("Idx->InputByHorizonS = %d next_indices == %d\n", Idx->InputByHorizonS,next_indices);
+            printf("partial_blc_indices == %d\n", partial_blc_indices);
+        }
+            for(int i = 0; i < HORIZON; i++)
+            {
+                for(int j = 0; j < DIM_OF_INPUT; j++)
+                {
+                    for(int k = i; k < HORIZON; k++)
+                    {
+                        if(k < PART_HORIZON){
+                            if(k == i){
+                                for(int h = j; h < DIM_OF_INPUT; h++){
+                         #ifdef USING_WEIGHTED_LEAST_SQUARES
+                                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * sqrtf( In[indices[id]].WHM );
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
+                        #else
+                                    tensorA[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    tensorB[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                        #endif
+                                    partial_blc_indices += 1;
+                                    next_indices += 1;
+                                }
+                            }else{
+                                for(int h = 0; h < DIM_OF_INPUT; h++){
+                        #ifdef USING_WEIGHTED_LEAST_SQUARES
+                                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * sqrtf( In[indices[id]].WHM );
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].LF * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k] * In[indices[id]].WHM;
+                        #else
+                                    tensorA[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    tensorB[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                        #endif
+                                    partial_blc_indices += 1; 
+                                    next_indices += 1;
+                                }
+                            }
+                        }else{
+                            if(k == i){
+                                for(int h = j; h < DIM_OF_INPUT; h++){
+                                    if(h == j){
+                                        TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                        next_indices += 1;
+                                    }else{
+                                        TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                        next_indices += 1;
+                                    }
+                                }
+                            }else{
+                                for(int h = 0; h < DIM_OF_INPUT; h++){
+                                    TempDifferCostValue += LH[next_indices] * In[indices[id]].Input[j][i] * In[indices[id]].Input[h][k];
+                                    next_indices += 1;
+                                }
+                            }
+                        }
+                    }      
+                }
+            }
+            Out[id].DifferCostValue = TempDifferCostValue;
+            Out[id].CostValue = In[indices[id]].LF;
+            // tensorL[id] = Out[id].CostValue - TempDifferCostValue;
+            for(int i = 0; i < HORIZON; i++)
+            {
+                for(int j = 0; j < DIM_OF_INPUT; j++)
+                {
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i] * sqrtf( In[indices[id]].WHM );
+                    Out[id].column_vector[partial_blc_indices] =  In[indices[id]].Input[j][i] * In[indices[id]].WHM;
+        #else
+                    tensorA[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i];
+                    tensorB[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = In[indices[id]].Input[j][i];
+                    Out[id].tensor_vector[partial_blc_indices] = In[indices[id]].Input[j][i];
+                    Out[id].column_vector[partial_blc_indices] = In[indices[id]].Input[j][i];
+        #endif
+                    // next_indices += 1;
+                    partial_blc_indices += 1;
+                }
+            }
+        #ifdef USING_WEIGHTED_LEAST_SQUARES
+            Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0 * sqrtf( In[indices[id]].WHM );
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = In[indices[id]].WHM;
+        #else
+            tensorA[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = 1.0;
+            tensorB[id * Idx->num_UKPrm_QC_S + partial_blc_indices] = 1.0;
+            Out[id].tensor_vector[Idx->num_UKPrm_QC_S - 1] = 1.0;
+            Out[id].column_vector[Idx->num_UKPrm_QC_S - 1] = 1.0;
+        #endif
+            // tensorL[id] = In[indices[id]].LF - TempDifferCostValue;
+            __syncthreads();
+            // tensorL[id] = Out[id].CostValue - TempDifferCostValue;
+            if(id == 0){
+                printf("next_indices == %d\n",next_indices);
+                printf("partial_blc_indices == %d\n", partial_blc_indices);
+            }
+            break;
+        
+        default:
+            break;
+    }
+}
+__global__ void NewtonLikeMethodGetTensorVectorNoIndex(double *tensorL, QHP *In, const IndexParams *Idx)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(Idx->sz_LCLsamples_S <= id)
+        return;
+    tensorL[id] = In[id].CostValue - In[id].DifferCostValue;
+    __syncthreads(); 
+}
+
 __global__ void NewtonLikeMethodGetTensorVectorNoIndex(QHP *Out, SampleInfo *Info)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;

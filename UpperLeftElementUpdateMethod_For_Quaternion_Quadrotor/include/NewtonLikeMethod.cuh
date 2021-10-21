@@ -27,6 +27,8 @@ __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *i
 __global__ void NewtonLikeMethodGetTensorVectorTest(QHP *Out, SampleInfo *In, int *indices, mInputSystem mDim);
 /* ------------- add 2021.10.6 ---------------*/ 
 __global__ void NewtonLikeMethodGetTensorVectorPartial(QHP *Out, SampleInfo *In,double *LH, int *indices, const IndexParams *Idx, mInputSystem mDim);
+__global__ void NewtonLikeMethodGetTensorVectorPartialDirect(QHP *Out, double *tensorA, double *tensorB, SampleInfo *In, double *LH, int *indices, const IndexParams *Idx, mInputSystem mDim);
+__global__ void NewtonLikeMethodGetTensorVectorNoIndex(double *tensorL, QHP *In, const IndexParams *Idx);
 
 __global__ void NewtonLikeMethodGenNormalizationMatrix(double *Mat, QHP *elements, int SAMPLE_SIZE, int Ydimention);
 __global__ void NewtonLikeMethodGenNormalizationVector(double *Vec, QHP *elements, int SAMPLE_SIZE);
