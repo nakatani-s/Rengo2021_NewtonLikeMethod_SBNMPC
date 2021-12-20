@@ -1,6 +1,6 @@
 /*
 */
-#include<iostream>
+/*#include<iostream>
 #include <stdio.h>
 #include <fstream>
 #include <math.h>
@@ -21,10 +21,11 @@
 #include "include/MCMPC.cuh"
 #include "include/NewtonLikeMethod.cuh"
 #include "include/optimum_conditions.cuh"
-#include "include/dataToFile.cuh"
+#include "include/dataToFile.cuh"*/
+#include "NL_based_MCMPC.cuh"
 // #include "include/cudaErrorCheck.cuh"
 
-#define CHECK(call)                                                  \
+/*#define CHECK(call)                                                  \
 {                                                                    \
     const cudaError_t error = call;                                  \
     if (error != cudaSuccess)                                        \
@@ -51,7 +52,7 @@
         exit(1);                                                                      \
     }                                                                                 \
 }
-
+*/
 
 int main(int argc, char **argv)
 {
