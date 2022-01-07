@@ -42,4 +42,9 @@ int main(int argc, char **argv)
     myMPC.set(u, setReference);
     myMPC.set(constraint, setConstraint);
     myMPC.set(w_matrix, setWeightMatrix);
+
+    for(int t = 0; t < OCP::SIM_STEPS; t++)
+    {
+        myMPC.execute_rdsa_mcmpc(u);
+    }
 }

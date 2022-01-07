@@ -15,6 +15,7 @@ void set_IdxParams(IndexParams *gIdx)
     gIdx->dim_of_input = OCP::DIM_OF_INPUT;
     gIdx->dim_of_state = OCP::DIM_OF_SYSTEM_STATE;
     gIdx->sample_size = CONTROLLER::NUM_OF_SAMPLES;
+    gIdx->elite_sample_size = CONTROLLER::NUM_OF_ELITE_SAMPLES;
     int IBH = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
     int HessSize = IBH * IBH;
     int HessElementsNum = (int)(HessSize * (HessSize + 1) / 2);
@@ -39,4 +40,5 @@ void set_IdxParams(IndexParams *gIdx)
     gIdx->predict_interval = CONTROLLER::PREDICTION_INTERVAL;
     gIdx->zeta = CONTROLLER::zeta;
     gIdx->sRho = CONTROLLER::sRho;
+    gIdx->micro = CONTROLLER::Micro;
 }

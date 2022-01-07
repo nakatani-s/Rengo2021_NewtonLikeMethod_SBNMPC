@@ -48,6 +48,7 @@ struct CONTROLLER
     static const double c_rate;
     static const double zeta;
     static const double sRho;
+    static const double Micro;
 };
 __device__ void input_constranint(double *u, double *constraints, double zeta);
 __device__ double getBarrierTerm(double *st, double *u, double *co, double sRho);

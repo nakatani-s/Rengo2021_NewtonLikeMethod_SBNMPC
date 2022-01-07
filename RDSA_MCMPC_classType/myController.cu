@@ -19,6 +19,7 @@ const int OCP::DIM_OF_CONSTRAINTS = 6;
 const int OCP::DIM_OF_WEIGHT_MATRIX = 16;
 
 const int CONTROLLER::NUM_OF_SAMPLES = 10000;
+const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 100;
 const double CONTROLLER::PREDICTION_INTERVAL = 0.90;
 const double CONTROLLER::CONTROL_CYCLE = 0.020;
 const int CONTROLLER::THREAD_PER_BLOCKS = 10;
@@ -34,6 +35,7 @@ const int CONTROLLER::NUM_OF_HESSIAN_ELEMENT = 820;
 const double CONTROLLER::c_rate = 0.95; //デフォルトはこの値
 const double CONTROLLER::zeta = 0.05; // デフォルトはこの値
 const double CONTROLLER::sRho = 1e-4;
+const double CONTROLLER::Micro = 1e-3;
 
 /* ここは変更しない */
 const int OCP::DIM_OF_HESSIAN = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;

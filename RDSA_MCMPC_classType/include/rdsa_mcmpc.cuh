@@ -113,9 +113,10 @@ public:
     unsigned int numBlocks, randomNums, threadPerBlocks;
 
     // static rdsa_mcmpc &get_instance();
-    void execute_rdsa_mcmpc();
+    void execute_rdsa_mcmpc(double *CurrentInput);
     void set(double *a, valueType type);
     // static void set_controller_param(double *prm);
+    void do_forward_simulation(double *state, double *input, IntegralMethod method);
 
 };
 

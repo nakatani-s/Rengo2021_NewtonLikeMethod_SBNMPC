@@ -42,6 +42,7 @@ typedef struct{
     int dim_of_input;
     int dim_of_state;
     int sample_size;
+    int elite_sample_size;
     unsigned int InputByHorizon;
     unsigned int HessianSize;
     unsigned int HessianElements;
@@ -50,7 +51,8 @@ typedef struct{
     double control_cycle;
     double predict_interval; 
     double zeta;
-    double sRho;   
+    double sRho;
+    double micro;
 }IndexParams;
 
 enum valueType{
@@ -58,6 +60,9 @@ enum valueType{
 };
 enum CoolingMethod{
     Geometric, Hyperbolic, NoCooling
+};
+enum IntegralMethod{
+    EULAR, RUNGE_KUTTA_45
 };
 
 #endif

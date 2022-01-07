@@ -35,6 +35,40 @@ __device__ double gen_input(unsigned int id, curandState *state, double ave, dou
     return ret;
 }
 
+__global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, SampleInfo *SIF)
+{
+    double totalweight = 0.0;
+    double *temp;
+    temp = (double *)malloc(sizeof(double) * Idx->InputByHorizon);
+
+    for(int i = 0; i < Idx->elite_sample_size; i++)
+    {
+        if(isnan(SIF[indices[i]].weight)){
+            totalweight += 0.0; 
+        }else{
+            totalweight += SIF[indices[i]].weight;
+        }
+    }
+    for(int t = 0; t < Idx->InputByHorizon; t++)
+    {
+        for(int i = 0; i < Idx->elite_sample_size; i++){
+            if(isnan(SIF[indices[i]].weight))
+            {
+                temp[t] += 0.0;
+            }else{
+                temp[t] += (SIF[indices[i]].weight * SIF[indices[i]].inputSeq[t]) / totalweight;
+            }
+        }
+        if(isnan(temp[t]))
+        {
+            out[t] = 0.0;
+        }else{
+            out[t] = temp[t];
+        }
+    }
+    free(temp);
+}
+
 __global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *SIF, IndexParams *Idx, double *cost_vec)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
@@ -44,9 +78,9 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
 
     double stageCost = 0.0;
     double totalCost = 0.0;
-    double totalCostF = 0.0;
+    // double totalCostF = 0.0;
     double logBarrier = 0.0;
-    double *u, *cg, *cu, *stateHere, *dstateHere;
+    double *cg, *cu, *stateHere, *dstateHere;
     // u = (double *)malloc(sizeof(double) * Idx->horizon * Idx->dim_of_input);
     cg = (double *)malloc(sizeof(double) * Idx->dim_of_input);
     cu = (double *)malloc(sizeof(double) * Idx->dim_of_input);
@@ -81,7 +115,9 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
 #endif
         // モデルを用いた予測シミュレーションの実行
         myDynamicModel(dstateHere, cu, stateHere, pr);
-        transition_Eular(stateHere, dstateHere, Idx->control_cycle, Idx->dim_of_state);
+        // transition_Eular(stateHere, dstateHere, Idx->control_cycle, Idx->dim_of_state);
+        transition_Eular(stateHere, dstateHere, d_sec, Idx->dim_of_state);
+
 
         logBarrier = getBarrierTerm(stateHere, cu, co, Idx->sRho);
         stageCost = myStageCostFunction(cu, stateHere, re, we);
@@ -91,9 +127,28 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         {
             SIF[id].inputSeq[init_ID + i] = cu[i];
         }
+        totalCost += stageCost;
+        
+        if(isnan(logBarrier)){
+            totalCost += 100;
+        }else{
+            totalCost += logBarrier;
+        }
     }
-
-    free(u);
+    double KC, S, lambda;
+    if(totalCost > 10 * Idx->horizon * Idx->dim_of_input){
+        lambda = 10 * Idx->horizon * Idx->dim_of_input;
+    }else{
+        lambda = Idx->micro * Idx->horizon * Idx->dim_of_input;
+    }
+    S = totalCost / lambda;
+    KC = exp(-S);
+    __syncthreads();
+    SIF[id].cost = totalCost / Idx->FittingSampleSize;
+    SIF[id].weight = KC;
+    cost_vec[id] = totalCost;
+    __syncthreads();
+    // free(u);
     free(cg);
     free(cu);
     free(stateHere);

@@ -150,7 +150,7 @@ void rdsa_mcmpc::set(double *a, valueType type)
     }
 }
 
-void rdsa_mcmpc::execute_rdsa_mcmpc()
+void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
 {
     double var;
     for(int iter = 0; iter < CONTROLLER::ITERATIONS; iter++)
@@ -169,9 +169,31 @@ void rdsa_mcmpc::execute_rdsa_mcmpc()
         // parallelSimForMCMPC<<<numBlocks,threadPerBlocks>>>( var, devRandSeed, deviceDataMC, devSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data()) );
         parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
                                                         thrust::raw_pointer_cast(devSampleInfo.data()), devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()));
+        
+        thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
+        thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
+        calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), thrust::raw_pointer_cast(devSampleInfo.data()));
+        CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
 
 
     }
     time_steps++;
 
+}
+
+void rdsa_mcmpc::do_forward_simulation(double *state, double *input, IntegralMethod method)
+{
+    double *diff_state;
+    diff_state = (double *)malloc(sizeof(double) * gIdx->dim_of_state);
+    switch(method)
+    {
+        case EULAR:
+            myDynamicModel(diff_state, input, state, _parameters);
+            transition_Eular(state, diff_state, gIdx->control_cycle, gIdx->dim_of_state);
+            break;
+        case RUNGE_KUTTA_45:
+            break;
+        default:
+            break;
+    }
 }

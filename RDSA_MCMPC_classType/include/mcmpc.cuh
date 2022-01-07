@@ -17,8 +17,9 @@ Random Direction Stochastic Approximation + Sample based Newton-like Method
 #include "myController.cuh"
 #include "integrator.cuh"
 // #include "dynamics.cuh"
-
+#define InputSaturation
 unsigned int countBlocks(unsigned int a, unsigned int b);
 __global__ void setup_RandomSeed(curandState *st, int seed);
 __global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *SIF, IndexParams *Idx, double *cost_vec);
+__global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, SampleInfo *SIF);
 // __global__ void parallelSimForMCMPC( );
