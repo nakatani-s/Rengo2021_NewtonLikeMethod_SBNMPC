@@ -9,6 +9,17 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
 {
     time_steps = 0;
     cMethod = method;
+
+    time_t timeValue;
+    struct tm *timeObject;
+    time( &timeValue );
+    timeObject = localtime( &timeValue );
+    char filename1[128], filename2[128];
+    sprintf(filename1,"data_input_%d%d_%d%d.txt", timeObject->tm_mon + 1, timeObject->tm_mday, timeObject->tm_hour,timeObject->tm_min);
+    sprintf(filename2,"data_state_%d%d_%d%d.txt", timeObject->tm_mon + 1, timeObject->tm_mday, timeObject->tm_hour,timeObject->tm_min);
+    fp_state = fopen(filename2, "w");
+    fp_input = fopen(filename1, "w");
+
     // インデックスパラメータの取得
     gIdx = (IndexParams*)malloc(sizeof(IndexParams));
     set_IdxParams(gIdx);
@@ -174,9 +185,15 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
         thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
         calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), thrust::raw_pointer_cast(devSampleInfo.data()));
         CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
-
-
     }
+    costValue = calc_cost(hostDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);
+    printf("time step :: %lf <====> cost value :: %lf\n", time_steps * gIdx->control_cycle, costValue);
+    // 予測入力を返す
+    for(int i = 0; i < gIdx->dim_of_input; i++)
+    {
+        CurrentInput[i] = hostDataMC[i];
+    }
+    
     time_steps++;
 
 }
@@ -192,8 +209,37 @@ void rdsa_mcmpc::do_forward_simulation(double *state, double *input, IntegralMet
             transition_Eular(state, diff_state, gIdx->control_cycle, gIdx->dim_of_state);
             break;
         case RUNGE_KUTTA_45:
+            runge_kutta_45(state, gIdx->dim_of_state, input, _parameters, gIdx->control_cycle);
             break;
         default:
             break;
+    }
+}
+
+void rdsa_mcmpc::write_data_to_file(double *_input)
+{
+    double current_time = time_steps * gIdx->control_cycle;
+    for(int i = 0; i < gIdx->dim_of_state; i++)
+    {
+        if(i == 0)
+        {
+            fprintf(fp_state,"%lf %lf ", current_time, _state[i]);
+        }else if( i == gIdx->dim_of_state - 1){
+            fprintf(fp_state,"%lf\n", _state[i]);
+        }else{
+            fprintf(fp_state,"%lf ", _state[i]);
+        }
+    }
+
+    for(int i = 0; i < gIdx->dim_of_input; i++)
+    {
+        if(i == 0)
+        {
+            fprintf(fp_input, "%lf %lf ", current_time, _input[i]);
+        }else if(i == gIdx->dim_of_input - 1){
+            fprintf(fp_input, "%lf\n", _input[i]);
+        }else{
+            fprintf(fp_input, "%lf ", _input[i]);
+        }
     }
 }

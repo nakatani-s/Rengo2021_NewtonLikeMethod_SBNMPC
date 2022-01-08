@@ -46,5 +46,8 @@ int main(int argc, char **argv)
     for(int t = 0; t < OCP::SIM_STEPS; t++)
     {
         myMPC.execute_rdsa_mcmpc(u);
+        myMPC.do_forward_simulation(state, u, RUNGE_KUTTA_45);
+        myMPC.set(state, setState);
+        myMPC.write_data_to_file(u);
     }
 }

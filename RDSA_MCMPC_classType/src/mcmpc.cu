@@ -154,3 +154,48 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
     free(stateHere);
     free(dstateHere);
 }
+
+double calc_cost(double *inputSeq, double *cs, double *prm, double *ref, double *cnstrnt, double *we, IndexParams *Idx)
+{
+    double stage_cost = 0.0;
+    double total_cost = 0.0;
+    double logBarrier;
+    double *dstate, *cu, *hcs;
+    dstate = (double *)malloc(sizeof(double) * Idx->dim_of_state);
+    hcs = (double *)malloc(sizeof(double) * Idx->dim_of_state);
+    cu = (double *)malloc(sizeof(double) * Idx->dim_of_input);
+    int i_pointer = 0;
+    double d_sec = Idx->predict_interval / Idx->horizon;
+    memcpy(hcs, cs, sizeof(double) * Idx->dim_of_state);
+    for(int t = 0; t < Idx->horizon; t++)
+    {
+        i_pointer = t * Idx->dim_of_input;
+        for(int i = 0; i < Idx->dim_of_input; i++)
+        {
+            cu[i] = inputSeq[i_pointer + i];
+        }
+        myDynamicModel(dstate, cu, hcs, prm);
+        transition_Eular(hcs, dstate, d_sec, Idx->dim_of_state);
+        logBarrier = getBarrierTerm(hcs, cu, cnstrnt, Idx->sRho);
+        stage_cost = myStageCostFunction(cu, hcs, ref, we);
+
+        total_cost += stage_cost;
+
+        if(isnan(logBarrier)){
+            total_cost += 100;
+        }else{
+            total_cost += logBarrier;
+        }
+    }
+
+    free(dstate);
+    free(hcs);
+    free(cu);
+    return total_cost;
+}
+
+__global__ void devicePrnDebuggerSIF(double ts, SampleInfo *SIF)
+{
+    // unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    printf("time step :: %lf <====> cost value :: %lf\n", ts, SIF->cost);
+}

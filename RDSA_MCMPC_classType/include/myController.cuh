@@ -50,8 +50,8 @@ struct CONTROLLER
     static const double sRho;
     static const double Micro;
 };
-__device__ void input_constranint(double *u, double *constraints, double zeta);
-__device__ double getBarrierTerm(double *st, double *u, double *co, double sRho);
+__host__ __device__ void input_constranint(double *u, double *constraints, double zeta);
+__host__ __device__ double getBarrierTerm(double *st, double *u, double *co, double sRho);
 __host__ __device__ void myDynamicModel(double *dstate, double *u, double *st, double *param);
 __host__ __device__ double myStageCostFunction(double *u, double *st, double *reference, double *weightMatrix);
 #endif

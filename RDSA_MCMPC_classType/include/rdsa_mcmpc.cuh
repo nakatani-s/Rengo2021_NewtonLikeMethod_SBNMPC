@@ -58,6 +58,7 @@ Random Direction Stochastic Approximation + Sample based Newton-like Method
 
 class rdsa_mcmpc{
 private:
+    FILE *fp_state, *fp_input;
     int time_steps;
 
     IndexParams *gIdx, *devIdx;
@@ -102,6 +103,7 @@ public:
     rdsa_mcmpc(rdsa_mcmpc &&) = delete;
     rdsa_mcmpc &operator=(rdsa_mcmpc &&) = delete;*/
 
+    double costValue;
     /* 推定入力値の一時保存用の配列 */
     CoolingMethod cMethod;
     double *hostDataMC, *hostDataRDSA, *deviceDataMC, *deviceDataRDSA;
@@ -117,6 +119,7 @@ public:
     void set(double *a, valueType type);
     // static void set_controller_param(double *prm);
     void do_forward_simulation(double *state, double *input, IntegralMethod method);
+    void write_data_to_file(double *input);
 
 };
 
