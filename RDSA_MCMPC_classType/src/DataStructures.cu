@@ -12,6 +12,7 @@ void init_structure(SampleInfo *info, int num, int dim)
         info[i].weight = 0.0;
         info[i].input = dim;
     }
+    printf("end of SamplInfo definition!!!! \n");
 }
 
 void init_structure(QHP *qhp, int num, int dim)

@@ -18,7 +18,7 @@ void set_IdxParams(IndexParams *gIdx)
     gIdx->elite_sample_size = CONTROLLER::NUM_OF_ELITE_SAMPLES;
     int IBH = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
     int HessSize = IBH * IBH;
-    int HessElementsNum = (int)(HessSize * (HessSize + 1) / 2);
+    int HessElementsNum = (int)(IBH * (IBH + 1) / 2);
     gIdx->InputByHorizon = IBH;
     gIdx->HessianSize = HessSize;
     gIdx->HessianElements = HessElementsNum;

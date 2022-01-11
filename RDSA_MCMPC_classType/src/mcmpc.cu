@@ -127,6 +127,11 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         {
             SIF[id].input[init_ID + i] = cu[i];
         }
+        if(id==1){
+            printf("param[0] = %lf ** param[1] = %lf\n", pr[0], pr[1]);
+            printf("input[0] = %lf input[1] = %lf\n", SIF[id].input[init_ID], SIF[id].input[init_ID+1]);
+            printf("statge cost now = %lf\n", stageCost);
+        }
         totalCost += stageCost;
         
         if(isnan(logBarrier)){

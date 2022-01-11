@@ -36,6 +36,7 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     /* Setup GPU parameters */
     randomNums = CONTROLLER::NUM_OF_SAMPLES * (OCP::DIM_OF_INPUT + 1) * CONTROLLER::HORIZON;
     numBlocks = countBlocks(CONTROLLER::NUM_OF_SAMPLES, CONTROLLER::THREAD_PER_BLOCKS);
+    printf("#numBlocks :== %d\n", numBlocks);
     threadPerBlocks = CONTROLLER::THREAD_PER_BLOCKS;
     cudaMalloc((void **)&devRandSeed, randomNums * sizeof(curandState));
     setup_RandomSeed<<<CONTROLLER::NUM_OF_SAMPLES, (OCP::DIM_OF_INPUT + 1) * CONTROLLER::HORIZON>>>(devRandSeed, rand());
@@ -44,8 +45,6 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     /* Setup Datastructure includes cost, InputSequences, ..., etc. */
     // hostSampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * CONTROLLER::NUM_OF_SAMPLES);
     // CHECK( cudaMalloc(&devSampleInfo, sizeof(SampleInfo) * CONTROLLER::NUM_OF_SAMPLES) );
-    info = new SampleInfo[Idx->sample_size];
-    init_structure(info, Idx->sample_size, Idx->InputByHorizon);
 
     /* 旧SystemControlVariable構造体のメンバ変数は、ユニファイドメモリで管理 */ 
     CHECK( cudaMallocManaged((void**)&_state, sizeof(double) * OCP::DIM_OF_SYSTEM_STATE) );
@@ -60,12 +59,16 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     CHECK( cudaMalloc(&Gradient, sizeof(double) * Idx->InputByHorizon) );
 
     /* For executing Least-Squares method by cublas */ 
-    CHECK( cudaMalloc(&CoeMatrix, sizeof(double) * Idx->PowHessianElements) );
-    CHECK( cudaMalloc(&TensortX, sizeof(double) * Idx->FittingSampleSize * Idx->HessianElements) );
+    printf("this == %d\n", Idx->HessianElements);
+    CHECK( cudaMalloc((void**)&CoeMatrix, sizeof(double) * Idx->PowHessianElements) );
+    /*CHECK( cudaMalloc(&TensortX, sizeof(double) * Idx->FittingSampleSize * Idx->HessianElements) );
     CHECK( cudaMalloc(&TransposeX, sizeof(double) * Idx->FittingSampleSize * Idx->HessianElements) );
-    CHECK( cudaMalloc(&TensortL, sizeof(double) * Idx->FittingSampleSize) );
+    CHECK( cudaMalloc(&TensortL, sizeof(double) * Idx->FittingSampleSize) );*/
 
     /* DataStructures for Tensor Vector per Samples */
+    info = new SampleInfo[Idx->sample_size];
+    init_structure(info, Idx->sample_size, Idx->InputByHorizon);
+
     qhp = new QHP[gIdx->sample_size];
     init_structure(qhp, Idx->sample_size, Idx->HessianElements);
 

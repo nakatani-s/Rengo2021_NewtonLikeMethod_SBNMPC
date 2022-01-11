@@ -68,7 +68,6 @@ private:
     SampleInfo *info;
     QHP *qhp;
     double *Hessian, *UpperHessian, *Gradient;
-    double *CoeMatrix, *bVector, *TensortX, *TransposeX, *TensortL;
 
     cusolverDnHandle_t cusolverH;
     cublasHandle_t cublasH;
@@ -108,6 +107,7 @@ public:
 
     // SystemControllerVariable *hstSCV, *devSCV;
     double *_state, *_reference,*_parameters, *_constraints, *_weightMatrix;
+    double *CoeMatrix, *bVector, *TensortX, *TransposeX, *TensortL;
     // double *hstPrm;
 
     unsigned int numBlocks, randomNums, threadPerBlocks;

@@ -8,7 +8,7 @@
 
 /* 以下のパラメータは必ず設定して下さい。 */ 
 // The following paameters are mandatory!
-const int OCP::SIM_STEPS = 150;
+const int OCP::SIM_STEPS = 15;
 
 const int OCP::DIM_OF_REFERENCE = 4;
 const int OCP::DIM_OF_SYSTEM_PARAMS = 11;
@@ -18,14 +18,14 @@ const int OCP::DIM_OF_INPUT = 4;
 const int OCP::DIM_OF_CONSTRAINTS = 6;
 const int OCP::DIM_OF_WEIGHT_MATRIX = 16;
 
-const int CONTROLLER::NUM_OF_SAMPLES = 100;
+const int CONTROLLER::NUM_OF_SAMPLES = 10;
 const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 10;
 const double CONTROLLER::PREDICTION_INTERVAL = 0.90;
 const double CONTROLLER::CONTROL_CYCLE = 0.020;
 const int CONTROLLER::THREAD_PER_BLOCKS = 10;
 const int CONTROLLER::ITERATIONS_MAX = 10;
 const int CONTROLLER::ITERATIONS = 1;
-const int CONTROLLER::HORIZON = 10;
+const int CONTROLLER::HORIZON = 5;
 
 const double CONTROLLER::SIGMA = 1.0;
 const int CONTROLLER::MAX_DIVISOR = 50;
