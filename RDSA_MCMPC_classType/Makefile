@@ -55,7 +55,8 @@ EXE = exe_rdsa_mcmpc
 OBJS = \
 $(OBJ_DIR)/main.o $(OBJ_DIR)/myController.o \
 $(OBJ_DIR)/init.o $(OBJ_DIR)/rdsa_mcmpc.o $(OBJ_DIR)/myControllerSrc.o \
-$(OBJ_DIR)/integrator.o $(OBJ_DIR)/mcmpc.o \
+$(OBJ_DIR)/integrator.o $(OBJ_DIR)/mcmpc.o $(OBJ_DIR)/DataStructures.o \
+$(OBJ_DIR)/managed.o $(OBJ_DIR)/dynamicalArray.o \
 ##########################################################
 
 ## Compile ##
@@ -78,7 +79,7 @@ $(OBJ_DIR)/%.o : %.cu
 	# $(CC) $(CC_FLAGS) -c $< -o $@
 
 # Compile CUDA source files to object files:
-$(OBJ_DIR)/%.o : $(SRC_DIR)/%.cu $(INC_DIR)/%.cuh
+$(OBJ_DIR)/%.o : $(SRC_DIR)/%.cu
 	# $(NVCC) $(NVCC_FLAGS) -dc $< -o $@ $(CUDA_INC_DIR)
 	$(NVCC) $(NVCC_FLAGS) -dc $< -o $@ $(CUDA_INC_DIR) $(NVCC_LIBS)
 

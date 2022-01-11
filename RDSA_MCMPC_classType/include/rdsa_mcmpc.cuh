@@ -65,10 +65,8 @@ private:
     
     curandState *devRandSeed;
 
-    // SampleInfo *devSampleInfo, *hostSampleInfo;
-    thrust::device_vector<SampleInfo> devSampleInfo;
-    thrust::device_vector<QHP> devQHP;
-
+    SampleInfo *info;
+    QHP *qhp;
     double *Hessian, *UpperHessian, *Gradient;
     double *CoeMatrix, *bVector, *TensortX, *TransposeX, *TensortL;
 

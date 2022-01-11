@@ -4,45 +4,21 @@
 
 #include "../include/DataStructures.cuh"
 
-// コンストラクタ
-SampleInfo::SampleInfo(){
-    cost = 0.0;
-    weight = 0.0;
-    int IBH = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
-    inputSeq = (double *)malloc(sizeof(double) * IBH);
-}
-
-SampleInfo::~SampleInfo(){
-    free(inputSeq);
-}
-
-// コンストラクタ for QHP class
-QHP::QHP()
+void init_structure(SampleInfo *info, int num, int dim)
 {
-    tensor_vector = (double *)malloc(sizeof(double) * OCP::DIM_OF_HESSIAN_ELEMENTS)
-    column_vector = (double *)malloc(sizeof(double) * OCP::DIM_OF_HESSIAN_ELEMENTS);
+    for(int i = 0; i < num; i++)
+    {
+        info[i].cost = 0.0;
+        info[i].weight = 0.0;
+        info[i].input = dim;
+    }
 }
 
-QHP::~QHP()
+void init_structure(QHP *qhp, int num, int dim)
 {
-    free(tensor_vector);
-    free(column_vector);
+    for(int i = 0; i < num; i++)
+    {
+        qhp[i].tensor_vector = dim;
+        qhp[i].column_vector = dim;  
+    }
 }
-
-/*SystemControlVariable::SystemControlVariable()
-{
-    params = (double *)malloc(sizeof(double) * OCP::DIM_OF_SYSTEM_PARAMS);
-    reference = (double *)malloc(sizeof(double) * OCP::DIM_OF_REFERENCE);
-    state = (double *)malloc(sizeof(double) * OCP::DIM_OF_STATES);
-    constraints = (double *)malloc(sizeof(double) * OCP::DIM_OF_CONSTRAINTS);
-    weightMatrix = (double *)malloc(sizeof(double) * OCP::DIM_OF_WEIGHT_MATRIX)
-}
-
-SystemControlVariable::~SystemControlVariable()
-{
-    free(params);
-    free(reference);
-    free(state);
-    free(constraints);
-    free(weightMatrix);
-}*/

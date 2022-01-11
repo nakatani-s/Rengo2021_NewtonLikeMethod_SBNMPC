@@ -44,8 +44,8 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     /* Setup Datastructure includes cost, InputSequences, ..., etc. */
     // hostSampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * CONTROLLER::NUM_OF_SAMPLES);
     // CHECK( cudaMalloc(&devSampleInfo, sizeof(SampleInfo) * CONTROLLER::NUM_OF_SAMPLES) );
-    thrust::device_vector<SampleInfo> devSampleInfo_temp(CONTROLLER::NUM_OF_SAMPLES);
-    devSampleInfo = devSampleInfo_temp;
+    info = new SampleInfo[Idx->sample_size];
+    init_structure(info, Idx->sample_size, Idx->InputByHorizon);
 
     /* 旧SystemControlVariable構造体のメンバ変数は、ユニファイドメモリで管理 */ 
     CHECK( cudaMallocManaged((void**)&_state, sizeof(double) * OCP::DIM_OF_SYSTEM_STATE) );
@@ -66,8 +66,8 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     CHECK( cudaMalloc(&TensortL, sizeof(double) * Idx->FittingSampleSize) );
 
     /* DataStructures for Tensor Vector per Samples */
-    thrust::device_vector<QHP> devQHP_temp(CONTROLLER::NUM_OF_SAMPLES);
-    devQHP = devQHP_temp;
+    qhp = new QHP[gIdx->sample_size];
+    init_structure(qhp, Idx->sample_size, Idx->HessianElements);
 
     /* thrust ベクターの実体を定義 */
     thrust::host_vector<int> indices_host_vec_temp(CONTROLLER::NUM_OF_SAMPLES);
@@ -179,11 +179,11 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
         }
         // parallelSimForMCMPC<<<numBlocks,threadPerBlocks>>>( var, devRandSeed, deviceDataMC, devSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data()) );
         parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
-                                                        thrust::raw_pointer_cast(devSampleInfo.data()), devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()));
+                                                        info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()));
         
         thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
         thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
-        calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), thrust::raw_pointer_cast(devSampleInfo.data()));
+        calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), info);
         CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
     }
     costValue = calc_cost(hostDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);

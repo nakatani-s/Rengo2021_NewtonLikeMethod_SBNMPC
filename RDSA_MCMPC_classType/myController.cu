@@ -8,7 +8,7 @@
 
 /* 以下のパラメータは必ず設定して下さい。 */ 
 // The following paameters are mandatory!
-const int OCP::SIM_STEPS = 1500;
+const int OCP::SIM_STEPS = 150;
 
 const int OCP::DIM_OF_REFERENCE = 4;
 const int OCP::DIM_OF_SYSTEM_PARAMS = 11;
@@ -18,8 +18,8 @@ const int OCP::DIM_OF_INPUT = 4;
 const int OCP::DIM_OF_CONSTRAINTS = 6;
 const int OCP::DIM_OF_WEIGHT_MATRIX = 16;
 
-const int CONTROLLER::NUM_OF_SAMPLES = 10000;
-const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 100;
+const int CONTROLLER::NUM_OF_SAMPLES = 100;
+const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 10;
 const double CONTROLLER::PREDICTION_INTERVAL = 0.90;
 const double CONTROLLER::CONTROL_CYCLE = 0.020;
 const int CONTROLLER::THREAD_PER_BLOCKS = 10;
@@ -29,7 +29,7 @@ const int CONTROLLER::HORIZON = 10;
 
 const double CONTROLLER::SIGMA = 1.0;
 const int CONTROLLER::MAX_DIVISOR = 50;
-const int CONTROLLER::NUM_OF_HESSIAN_ELEMENT = 820;
+// const int CONTROLLER::NUM_OF_HESSIAN_ELEMENT = 820;
 
 // 以下の値は、推奨値
 const double CONTROLLER::c_rate = 0.95; //デフォルトはこの値
@@ -38,9 +38,9 @@ const double CONTROLLER::sRho = 1e-4;
 const double CONTROLLER::Micro = 1e-3;
 
 /* ここは変更しない */
-const int OCP::DIM_OF_HESSIAN = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
-const int numerator_temp = OCP::DIM_OF_HESSIAN * (OCP::DIM_OF_HESSIAN + 1); 
-const int OCP::DIM_OF_HESSIAN_ELEMENTS = (int)(numerator_temp/2);
+// const int OCP::DIM_OF_HESSIAN = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
+// const int numerator_temp = OCP::DIM_OF_HESSIAN * (OCP::DIM_OF_HESSIAN + 1); 
+// const int OCP::DIM_OF_HESSIAN_ELEMENTS = (int)(numerator_temp/2);
 
 /*void setSystemControllerVariable(SystemControllerVariable *initVariables)
 {

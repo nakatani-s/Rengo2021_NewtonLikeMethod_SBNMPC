@@ -56,7 +56,7 @@ __global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, 
             {
                 temp[t] += 0.0;
             }else{
-                temp[t] += (SIF[indices[i]].weight * SIF[indices[i]].inputSeq[t]) / totalweight;
+                temp[t] += (SIF[indices[i]].weight * SIF[indices[i]].input[t]) / totalweight;
             }
         }
         if(isnan(temp[t]))
@@ -125,7 +125,7 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         // 入力列のコピー
         for(int i = 0; i < Idx->dim_of_input; i++)
         {
-            SIF[id].inputSeq[init_ID + i] = cu[i];
+            SIF[id].input[init_ID + i] = cu[i];
         }
         totalCost += stageCost;
         

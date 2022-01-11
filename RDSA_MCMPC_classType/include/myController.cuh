@@ -21,8 +21,8 @@ struct OCP
 
     static const int DIM_OF_CONSTRAINTS; //制約の数 (例：u_min < u < umax, x_max < x < x_max なら4)
     static const int DIM_OF_WEIGHT_MATRIX; //コスト関数の重み（Q,R）の要素数
-    static const int DIM_OF_HESSIAN;
-    static const int DIM_OF_HESSIAN_ELEMENTS;
+    // static const int DIM_OF_HESSIAN;
+    // static const int DIM_OF_HESSIAN_ELEMENTS;
 
     const double *initial_state;
 };
@@ -43,7 +43,7 @@ struct CONTROLLER
     static const double CONTROL_CYCLE; //制御周期
     static const double SIGMA;
     static const int MAX_DIVISOR;
-    static const int NUM_OF_HESSIAN_ELEMENT;
+    // static const int NUM_OF_HESSIAN_ELEMENT;
 
     static const double c_rate;
     static const double zeta;
