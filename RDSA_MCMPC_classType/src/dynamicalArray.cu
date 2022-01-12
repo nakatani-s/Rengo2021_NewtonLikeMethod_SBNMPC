@@ -38,6 +38,10 @@ __host__ __device__ double& DynamicalArray::operator[](int pos)
 {
     return data[pos];
 }
+__host__ __device__ double* DynamicalArray::d_pointer()
+{
+    return data;
+}
 
 void DynamicalArray::_realloc_data(int len)
 {

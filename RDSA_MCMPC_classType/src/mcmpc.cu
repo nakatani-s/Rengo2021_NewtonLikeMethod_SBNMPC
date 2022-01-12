@@ -81,17 +81,17 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
     double totalCost = 0.0;
     // double totalCostF = 0.0;
     double logBarrier = 0.0;
-    double *cg, *cu, *stateHere, *dstateHere;
+    /*double *cg, *cu, *stateHere, *dstateHere;
     // u = (double *)malloc(sizeof(double) * Idx->horizon * Idx->dim_of_input);
     cg = (double *)malloc(sizeof(double) * Idx->dim_of_input);
     cu = (double *)malloc(sizeof(double) * Idx->dim_of_input);
     stateHere = (double *)malloc(sizeof(double) * Idx->dim_of_state);
     dstateHere = (double *)malloc(sizeof(double) * Idx->dim_of_state);
-    // temp_u = (double *)malloc(sizeof(double) * Idx->dim_of_input * Idx->horizon);
+    // temp_u = (double *)malloc(sizeof(double) * Idx->dim_of_input * Idx->horizon);*/
 
     for(int i = 0; i< Idx->dim_of_state; i++)
     {
-        stateHere[i] = st[i];
+        SIF[id].dev_state[i] = st[i];
     }
 
     double d_sec = Idx->predict_interval / Idx->horizon;
@@ -104,30 +104,30 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         {
             if(isnan(mean[init_ID + id_i]))
             {
-                cg[id_i] = 0.0;
+                SIF[id].dev_input[id_i] = 0.0;
             }else{
-                cg[id_i] = mean[init_ID + id_i];
+                SIF[id].dev_input[id_i] = mean[init_ID + id_i];
             }
             unsigned int h_seq = seq + id_i * (Idx->horizon * Idx->dim_of_input);
-            cu[id_i] = gen_input(h_seq, rndSeed, cg[id_i], var); // ここで、入力のインデックスを回す実装の導入
+            SIF[id].dev_input[id_i] = gen_input(h_seq, rndSeed, SIF[id].dev_input[id_i], var); // ここで、入力のインデックスを回す実装の導入
         }
         seq += Idx->sample_size;
 #ifdef InputSaturation
-        input_constranint(cu, co, Idx->zeta);
+        input_constranint(SIF[id].dev_input.d_pointer(), co, Idx->zeta);
 #endif
         // モデルを用いた予測シミュレーションの実行
-        myDynamicModel(dstateHere, cu, stateHere, pr);
+        myDynamicModel(SIF[id].dev_dstate.d_pointer(), SIF[id].dev_input.d_pointer(), SIF[id].dev_state.d_pointer(), pr);
         // transition_Eular(stateHere, dstateHere, Idx->control_cycle, Idx->dim_of_state);
-        transition_Eular(stateHere, dstateHere, d_sec, Idx->dim_of_state);
+        transition_Eular(SIF[id].dev_state.d_pointer(), SIF[id].dev_dstate.d_pointer(), d_sec, Idx->dim_of_state);
 
 
-        logBarrier = getBarrierTerm(stateHere, cu, co, Idx->sRho);
-        stageCost = myStageCostFunction(cu, stateHere, re, we);
+        logBarrier = getBarrierTerm(SIF[id].dev_state.d_pointer(), SIF[id].dev_input.d_pointer(), co, Idx->sRho);
+        stageCost = myStageCostFunction(SIF[id].dev_input.d_pointer(), SIF[id].dev_state.d_pointer(), re, we);
 
         // 入力列のコピー
         for(int i = 0; i < Idx->dim_of_input; i++)
         {
-            SIF[id].input[init_ID + i] = cu[i];
+            SIF[id].input[init_ID + i] = SIF[id].dev_input[i];
         }
         /*if(id==1){
             printf("param[0] = %lf ** param[1] = %lf\n", pr[0], pr[1]);
@@ -158,10 +158,10 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
     indices[id] = id;
     // __syncthreads();
     // free(u);
-    free(cg);
+    /*free(cg);
     free(cu);
     free(stateHere);
-    free(dstateHere);
+    free(dstateHere);*/
     // free(temp_u);
 }
 

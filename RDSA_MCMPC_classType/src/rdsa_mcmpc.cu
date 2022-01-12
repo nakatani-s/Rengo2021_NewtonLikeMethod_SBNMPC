@@ -67,10 +67,10 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
 
     /* DataStructures for Tensor Vector per Samples */
     info = new SampleInfo[Idx->sample_size];
-    init_structure(info, Idx->sample_size, Idx->InputByHorizon);
+    init_structure(info, Idx->sample_size, gIdx);
 
     qhp = new QHP[gIdx->sample_size];
-    init_structure(qhp, Idx->sample_size, Idx->HessianElements);
+    init_structure(qhp, Idx->sample_size, gIdx);
 
     /* thrust ベクターの実体を定義 */
     thrust::host_vector<int> indices_host_vec_temp(CONTROLLER::NUM_OF_SAMPLES);

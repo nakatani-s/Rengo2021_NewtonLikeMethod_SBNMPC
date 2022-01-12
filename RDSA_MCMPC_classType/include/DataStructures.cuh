@@ -34,6 +34,7 @@ public:
     ~DynamicalArray();
     // Access operator (from host or device)
     __host__ __device__ double& operator[](int pos);
+    __host__ __device__ double* d_pointer();
 private:
     void _realloc_data(int len);
 };
@@ -43,6 +44,9 @@ struct SampleInfo : public Managed
     double cost;
     double weight;
     DynamicalArray input;
+    DynamicalArray dev_state;
+    DynamicalArray dev_input;
+    DynamicalArray dev_dstate;
 };
 
 struct QHP : public Managed
@@ -56,10 +60,6 @@ template <typename TYPE> void launch_by_value(TYPE data){
     int milli_second = 10;
     usleep(milli_second); 
 }
-
-void init_structure(SampleInfo *info, int num, int dim);
-void init_structure(QHP *qhp, int num, int dim);
-
 
 typedef struct{
     int horizon;
@@ -78,6 +78,9 @@ typedef struct{
     double sRho;
     double micro;
 }IndexParams;
+
+void init_structure(SampleInfo *info, int num, IndexParams *Idx);
+void init_structure(QHP *qhp, int num, IndexParams *Idx);
 
 enum valueType{
     setState, setInput, setParameter, setConstraint, setWeightMatrix, setReference
