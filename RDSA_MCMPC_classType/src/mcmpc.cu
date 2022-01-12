@@ -35,7 +35,7 @@ __device__ double gen_input(unsigned int id, curandState *state, double ave, dou
     return ret;
 }
 
-__global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, SampleInfo *SIF)
+__global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, SampleInfo *info)
 {
     double totalweight = 0.0;
     double *temp;
@@ -43,21 +43,21 @@ __global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, 
 
     for(int i = 0; i < Idx->elite_sample_size; i++)
     {
-        if(isnan(SIF[indices[i]].weight)){
+        if(isnan(info[indices[i]].weight)){
             totalweight += 0.0; 
         }else{
-            totalweight += SIF[indices[i]].weight;
+            totalweight += info[indices[i]].weight;
         }
     }
     for(int t = 0; t < Idx->InputByHorizon; t++)
     {
         temp[t] = 0.0;
         for(int i = 0; i < Idx->elite_sample_size; i++){
-            if(isnan(SIF[indices[i]].weight))
+            if(isnan(info[indices[i]].weight))
             {
                 temp[t] += 0.0;
             }else{
-                temp[t] += (SIF[indices[i]].weight * SIF[indices[i]].input[t]) / totalweight;
+                temp[t] += (info[indices[i]].weight * info[indices[i]].input[t]) / totalweight;
             }
         }
         if(isnan(temp[t]))
@@ -70,7 +70,7 @@ __global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, 
     free(temp);
 }
 
-__global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *SIF, IndexParams *Idx, double *cost_vec, int *indices)
+__global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *info, IndexParams *Idx, double *cost_vec, int *indices)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     unsigned int seq = id;
@@ -91,7 +91,7 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
 
     for(int i = 0; i< Idx->dim_of_state; i++)
     {
-        SIF[id].dev_state[i] = st[i];
+        info[id].dev_state[i] = st[i];
     }
 
     double d_sec = Idx->predict_interval / Idx->horizon;
@@ -104,34 +104,34 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         {
             if(isnan(mean[init_ID + id_i]))
             {
-                SIF[id].dev_input[id_i] = 0.0;
+                info[id].dev_input[id_i] = 0.0;
             }else{
-                SIF[id].dev_input[id_i] = mean[init_ID + id_i];
+                info[id].dev_input[id_i] = mean[init_ID + id_i];
             }
             unsigned int h_seq = seq + id_i * (Idx->horizon * Idx->dim_of_input);
-            SIF[id].dev_input[id_i] = gen_input(h_seq, rndSeed, SIF[id].dev_input[id_i], var); // ここで、入力のインデックスを回す実装の導入
+            info[id].dev_input[id_i] = gen_input(h_seq, rndSeed, info[id].dev_input[id_i], var); // ここで、入力のインデックスを回す実装の導入
         }
         seq += Idx->sample_size;
 #ifdef InputSaturation
-        input_constranint(SIF[id].dev_input.d_pointer(), co, Idx->zeta);
+        input_constranint(info[id].dev_input.d_pointer(), co, Idx->zeta);
 #endif
         // モデルを用いた予測シミュレーションの実行
-        myDynamicModel(SIF[id].dev_dstate.d_pointer(), SIF[id].dev_input.d_pointer(), SIF[id].dev_state.d_pointer(), pr);
+        myDynamicModel(info[id].dev_dstate.d_pointer(), info[id].dev_input.d_pointer(), info[id].dev_state.d_pointer(), pr);
         // transition_Eular(stateHere, dstateHere, Idx->control_cycle, Idx->dim_of_state);
-        transition_Eular(SIF[id].dev_state.d_pointer(), SIF[id].dev_dstate.d_pointer(), d_sec, Idx->dim_of_state);
+        transition_Eular(info[id].dev_state.d_pointer(), info[id].dev_dstate.d_pointer(), d_sec, Idx->dim_of_state);
 
 
-        logBarrier = getBarrierTerm(SIF[id].dev_state.d_pointer(), SIF[id].dev_input.d_pointer(), co, Idx->sRho);
-        stageCost = myStageCostFunction(SIF[id].dev_input.d_pointer(), SIF[id].dev_state.d_pointer(), re, we);
+        logBarrier = getBarrierTerm(info[id].dev_state.d_pointer(), info[id].dev_input.d_pointer(), co, Idx->sRho);
+        stageCost = myStageCostFunction(info[id].dev_input.d_pointer(), info[id].dev_state.d_pointer(), re, we);
 
         // 入力列のコピー
         for(int i = 0; i < Idx->dim_of_input; i++)
         {
-            SIF[id].input[init_ID + i] = SIF[id].dev_input[i];
+            info[id].input[init_ID + i] = info[id].dev_input[i];
         }
         /*if(id==1){
             printf("param[0] = %lf ** param[1] = %lf\n", pr[0], pr[1]);
-            printf("input[0] = %lf input[1] = %lf\n", SIF[id].input[init_ID], SIF[id].input[init_ID+1]);
+            printf("input[0] = %lf input[1] = %lf\n", info[id].input[init_ID], info[id].input[init_ID+1]);
             printf("statge cost now = %lf **** logbarrier = %lf\n", stageCost, logBarrier);
         }*/
         totalCost += stageCost;
@@ -152,8 +152,8 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
     KC = exp(-S);
     // if(id < 10){ printf("%d sample has %lf cost value by %lf total cost\n", id, KC, totalCost);}
     // __syncthreads();
-    SIF[id].cost = totalCost / Idx->FittingSampleSize;
-    SIF[id].weight = KC;
+    info[id].cost = totalCost / Idx->FittingSampleSize;
+    info[id].weight = KC;
     cost_vec[id] = totalCost;
     indices[id] = id;
     // __syncthreads();
