@@ -110,6 +110,8 @@ rdsa_mcmpc::~rdsa_mcmpc()
 {
     if(cusolverH) cusolverDnDestroy(cusolverH);
     if(cublasH) cublasDestroy(cublasH);
+    fclose(fp_input);
+    fclose(fp_state);
     cudaDeviceReset();
 }
 
@@ -167,6 +169,8 @@ void rdsa_mcmpc::set(double *a, valueType type)
 void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
 {
     double var;
+    float all_time, gpu_time, thrust_time;
+    clock_t start_t, stop_t, thrust_start_t;
     for(int iter = 0; iter < CONTROLLER::ITERATIONS; iter++)
     {
         switch(cMethod)
@@ -180,17 +184,28 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
             default:
                 var = CONTROLLER::SIGMA;
         }
+        start_t = clock();
         // parallelSimForMCMPC<<<numBlocks,threadPerBlocks>>>( var, devRandSeed, deviceDataMC, devSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data()) );
         parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
-                                                        info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()));
-        
-        thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
+                                                        info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()), thrust::raw_pointer_cast(indices_device_vec.data()));
+        cudaDeviceSynchronize();
+        stop_t = clock();
+        gpu_time = stop_t - start_t;
+        thrust_start_t = clock();
+        // thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
         thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
+        stop_t = clock();
+        thrust_time = stop_t - thrust_start_t;
         calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), info);
+        stop_t = clock();
+        all_time = stop_t - start_t;
         CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
     }
     costValue = calc_cost(hostDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);
     printf("time step :: %lf <====> cost value :: %lf\n", time_steps * gIdx->control_cycle, costValue);
+    printf("TIME of GPU executed parallel simulation := %f\n", gpu_time / CLOCKS_PER_SEC);
+    printf("TIME of executed Sort by Thrust := %f\n",thrust_time / CLOCKS_PER_SEC);
+    printf("TIME of All procedure ended := %f\n", all_time / CLOCKS_PER_SEC);
     // 予測入力を返す
     for(int i = 0; i < gIdx->dim_of_input; i++)
     {

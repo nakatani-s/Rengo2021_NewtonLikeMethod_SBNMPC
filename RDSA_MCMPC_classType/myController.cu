@@ -8,7 +8,7 @@
 
 /* 以下のパラメータは必ず設定して下さい。 */ 
 // The following paameters are mandatory!
-const int OCP::SIM_STEPS = 15;
+const int OCP::SIM_STEPS = 500;
 
 const int OCP::DIM_OF_REFERENCE = 4;
 const int OCP::DIM_OF_SYSTEM_PARAMS = 11;
@@ -18,16 +18,16 @@ const int OCP::DIM_OF_INPUT = 4;
 const int OCP::DIM_OF_CONSTRAINTS = 6;
 const int OCP::DIM_OF_WEIGHT_MATRIX = 16;
 
-const int CONTROLLER::NUM_OF_SAMPLES = 10;
-const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 10;
-const double CONTROLLER::PREDICTION_INTERVAL = 0.90;
+const int CONTROLLER::NUM_OF_SAMPLES = 9000;
+const int CONTROLLER::NUM_OF_ELITE_SAMPLES = 200;
+const double CONTROLLER::PREDICTION_INTERVAL = 0.98;
 const double CONTROLLER::CONTROL_CYCLE = 0.020;
-const int CONTROLLER::THREAD_PER_BLOCKS = 10;
+const int CONTROLLER::THREAD_PER_BLOCKS = 100;
 const int CONTROLLER::ITERATIONS_MAX = 10;
 const int CONTROLLER::ITERATIONS = 1;
-const int CONTROLLER::HORIZON = 5;
+const int CONTROLLER::HORIZON = 14;
 
-const double CONTROLLER::SIGMA = 1.0;
+const double CONTROLLER::SIGMA = 2.0;
 const int CONTROLLER::MAX_DIVISOR = 50;
 // const int CONTROLLER::NUM_OF_HESSIAN_ELEMENT = 820;
 
@@ -35,7 +35,7 @@ const int CONTROLLER::MAX_DIVISOR = 50;
 const double CONTROLLER::c_rate = 0.95; //デフォルトはこの値
 const double CONTROLLER::zeta = 0.05; // デフォルトはこの値
 const double CONTROLLER::sRho = 1e-4;
-const double CONTROLLER::Micro = 1e-3;
+const double CONTROLLER::Micro = 1e-1;
 
 /* ここは変更しない */
 // const int OCP::DIM_OF_HESSIAN = OCP::DIM_OF_INPUT * CONTROLLER::HORIZON;
@@ -49,10 +49,10 @@ const double CONTROLLER::Micro = 1e-3;
 
 __device__ void input_constranint(double *u, double *constraints, double zeta)
 {
-    check_constraint(u[0], constraints[0], constraints[1], zeta);
+    u[0] = check_constraint(u[0], constraints[4], constraints[5], zeta);
     for(int i = 1; i < 4; i++)
     {
-        check_constraint(u[i], constraints[2], constraints[3], zeta);
+        u[i] = check_constraint(u[i], constraints[2], constraints[3], zeta);
     }
 }
 
@@ -65,10 +65,10 @@ __device__ double getBarrierTerm(double *st, double *u, double *co, double sRho)
         ret += barrierConsraint(u[i], co[2], co[3], sRho);
     }
     ret += barrierConsraint(u[0], co[4], co[5], sRho);
-    for(int i = 6; i < 9; i++)
+    /*for(int i = 6; i < 9; i++)
     {
         ret += barrierConsraint(st[i], co[0], co[1], sRho);
-    }
+    }*/
     return ret;
 }
 
@@ -134,9 +134,9 @@ __host__ __device__ double myStageCostFunction(double *u, double *st, double *re
     {
         ret += weightMatrix[i] * st[i] * st[i];
     }
-
-    ret += weightMatrix[9] * (u[0] - reference[0]) * (u[0] - reference[0]);
-    ret += weightMatrix[10] * u[1] * u[1] + weightMatrix[11] * u[2] * u[2] + weightMatrix[12] * u[3] * u[3];
+    ret += weightMatrix[9] * st[10] * st[10] + weightMatrix[10] * st[11] * st[11] + weightMatrix[11] * st[12] * st[12];
+    ret += weightMatrix[12] * (u[0] - reference[0]) * (u[0] - reference[0]);
+    ret += weightMatrix[13] * u[1] * u[1] + weightMatrix[14] * u[2] * u[2] + weightMatrix[15] * u[3] * u[3];
 
     ret = ret / 2;
 

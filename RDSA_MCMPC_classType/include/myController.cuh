@@ -7,6 +7,7 @@
 // #include "mcmpc.cuh"
 #ifndef MYCONTROLLER_CUH
 #define MYCONTROLLER_CUH
+#define InputSaturation
 
 struct OCP
 {

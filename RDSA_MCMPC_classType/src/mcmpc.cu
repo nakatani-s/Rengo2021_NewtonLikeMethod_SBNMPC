@@ -51,6 +51,7 @@ __global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, 
     }
     for(int t = 0; t < Idx->InputByHorizon; t++)
     {
+        temp[t] = 0.0;
         for(int i = 0; i < Idx->elite_sample_size; i++){
             if(isnan(SIF[indices[i]].weight))
             {
@@ -69,7 +70,7 @@ __global__ void calc_weighted_mean(double *out, IndexParams *Idx, int *indices, 
     free(temp);
 }
 
-__global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *SIF, IndexParams *Idx, double *cost_vec)
+__global__ void parallelSimForMC(double var, double *st, double *pr, double *re, double *co, double *we, double *mean, curandState *rndSeed, SampleInfo *SIF, IndexParams *Idx, double *cost_vec, int *indices)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     unsigned int seq = id;
@@ -86,6 +87,7 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
     cu = (double *)malloc(sizeof(double) * Idx->dim_of_input);
     stateHere = (double *)malloc(sizeof(double) * Idx->dim_of_state);
     dstateHere = (double *)malloc(sizeof(double) * Idx->dim_of_state);
+    // temp_u = (double *)malloc(sizeof(double) * Idx->dim_of_input * Idx->horizon);
 
     for(int i = 0; i< Idx->dim_of_state; i++)
     {
@@ -127,37 +129,40 @@ __global__ void parallelSimForMC(double var, double *st, double *pr, double *re,
         {
             SIF[id].input[init_ID + i] = cu[i];
         }
-        if(id==1){
+        /*if(id==1){
             printf("param[0] = %lf ** param[1] = %lf\n", pr[0], pr[1]);
             printf("input[0] = %lf input[1] = %lf\n", SIF[id].input[init_ID], SIF[id].input[init_ID+1]);
-            printf("statge cost now = %lf\n", stageCost);
-        }
+            printf("statge cost now = %lf **** logbarrier = %lf\n", stageCost, logBarrier);
+        }*/
         totalCost += stageCost;
         
         if(isnan(logBarrier)){
             totalCost += 100;
         }else{
-            totalCost += logBarrier;
+            totalCost += 1e-2*Idx->sRho*logBarrier;
         }
     }
     double KC, S, lambda;
-    if(totalCost > 10 * Idx->horizon * Idx->dim_of_input){
+    if(totalCost > Idx->horizon * Idx->dim_of_input){
         lambda = 10 * Idx->horizon * Idx->dim_of_input;
     }else{
         lambda = Idx->micro * Idx->horizon * Idx->dim_of_input;
     }
     S = totalCost / lambda;
     KC = exp(-S);
-    __syncthreads();
+    // if(id < 10){ printf("%d sample has %lf cost value by %lf total cost\n", id, KC, totalCost);}
+    // __syncthreads();
     SIF[id].cost = totalCost / Idx->FittingSampleSize;
     SIF[id].weight = KC;
     cost_vec[id] = totalCost;
-    __syncthreads();
+    indices[id] = id;
+    // __syncthreads();
     // free(u);
     free(cg);
     free(cu);
     free(stateHere);
     free(dstateHere);
+    // free(temp_u);
 }
 
 double calc_cost(double *inputSeq, double *cs, double *prm, double *ref, double *cnstrnt, double *we, IndexParams *Idx)
@@ -171,7 +176,11 @@ double calc_cost(double *inputSeq, double *cs, double *prm, double *ref, double 
     cu = (double *)malloc(sizeof(double) * Idx->dim_of_input);
     int i_pointer = 0;
     double d_sec = Idx->predict_interval / Idx->horizon;
-    memcpy(hcs, cs, sizeof(double) * Idx->dim_of_state);
+    // memcpy(hcs, cs, sizeof(double) * Idx->dim_of_state);
+    for(int i = 0; i< Idx->dim_of_state; i++)
+    {
+        hcs[i] = cs[i];
+    }
     for(int t = 0; t < Idx->horizon; t++)
     {
         i_pointer = t * Idx->dim_of_input;
@@ -183,13 +192,15 @@ double calc_cost(double *inputSeq, double *cs, double *prm, double *ref, double 
         transition_Eular(hcs, dstate, d_sec, Idx->dim_of_state);
         logBarrier = getBarrierTerm(hcs, cu, cnstrnt, Idx->sRho);
         stage_cost = myStageCostFunction(cu, hcs, ref, we);
+        
+        // printf("statge cost now = %lf **** logbarrier = %lf\n", stage_cost, logBarrier);
 
         total_cost += stage_cost;
 
         if(isnan(logBarrier)){
             total_cost += 100;
         }else{
-            total_cost += logBarrier;
+            total_cost += 1e-2*Idx->sRho*logBarrier;
         }
     }
 
