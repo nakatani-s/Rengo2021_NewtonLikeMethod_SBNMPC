@@ -16,6 +16,8 @@ int main(int argc, char **argv)
     rdsa_mcmpc myMPC(NoCooling);
     // state ------------------------------->> X,   dX,  Y,   dY,  Z,   dZ,  dγ, dβ, dα, q1,  q2,, q3,  q4
     double state[OCP::DIM_OF_SYSTEM_STATE] = { 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
+    double thrust_max = 230.0 * 230.0;
+    double param[OCP::DIM_OF_SYSTEM_PARAMS] = {9.806650, 150.0, 230.0,thrust_max, 5.0, 4.0e-6, 0.0085, 0.008, 0.0165, 1.0, 0.5};
     double u[OCP::DIM_OF_INPUT] = {9.8066, 0.0, 0.0, 0.0};
     double constraint[OCP::DIM_OF_CONSTRAINTS] = {-0.2, 0.2, -20.0, 20.0, 0.0, 25.0};
     double w_matrix[OCP::DIM_OF_WEIGHT_MATRIX] = { };
@@ -38,6 +40,7 @@ int main(int argc, char **argv)
     w_matrix[15] = 0.1; /* <<--R44 */
 
     myMPC.set(state, setState);
+    myMPC.set(param, setParameter);
     myMPC.set(u, setInput);
     myMPC.set(u, setReference);
     myMPC.set(constraint, setConstraint);

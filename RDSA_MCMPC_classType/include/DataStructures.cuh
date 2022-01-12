@@ -59,35 +59,7 @@ template <typename TYPE> void launch_by_value(TYPE data){
 
 void init_structure(SampleInfo *info, int num, int dim);
 void init_structure(QHP *qhp, int num, int dim);
-/*class SampleInfo
-{
-public:
-    SampleInfo(); //コンストラクタ
-    ~SampleInfo(); //デストラクタ
-    double cost;
-    double weight;
-    double *inputSeq;
-};*/
-// 以下の構造体は、cudaのユニファイドメモリで管理
-/*class SystemControlVariable
-{
-public:
-    SystemControlVariable();
-    ~SystemControlVariable();
-    double *params;
-    double *reference;
-    double *state;
-    double *constraints;
-    double *weightMatrix;
-};*/
 
-/*class QHP{
-public:
-    QHP();
-    ~QHP();
-    double *tensor_vector;
-    double *column_vector;
-};*/
 
 typedef struct{
     int horizon;

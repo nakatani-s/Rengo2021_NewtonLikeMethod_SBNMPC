@@ -64,6 +64,12 @@ $(OBJ_DIR)/managed.o $(OBJ_DIR)/dynamicalArray.o \
 # Link c++ and CUDA compiled object files to target executable:
 #$(EXE) : $(OBJS)
 #	$(CC) $(CC_FLAGS) $(OBJS) -o $@ $(CUDA_INC_DIR) $(CUDA_LIB_DIR) $(CUDA_LINK_LIBS)
+all: $(OBJ_DIR) $(EXE)
+$(OBJ_DIR) : $(wildcard *.o)
+	@if[! -d $(OBJ_DIR) ]; then \
+    	echo "mkdir $(OBJ_DIR)"; mkdir $(OBJ_DIR); \
+    fi
+
 $(EXE) : $(OBJS)
 	$(NVCC) $(NVCC_FLAGS) $(OBJS) -o $@ $(CUDA_LIB_DIR) $(CUDA_LINK_LIBS)
 
