@@ -87,9 +87,9 @@ private:
     double *QR_tau;
     double *hQR_tau;
 
-    thrust::host_vector<int> indices_host_vec;
+    // thrust::host_vector<int> indices_host_vec;
     thrust::device_vector<int> indices_device_vec;
-    thrust::host_vector<double> sort_key_host_vec;
+    // thrust::host_vector<double> sort_key_host_vec;
     thrust::device_vector<double> sort_key_device_vec;
 
 public:
@@ -103,7 +103,9 @@ public:
     double costValue;
     /* 推定入力値の一時保存用の配列 */
     CoolingMethod cMethod;
-    double *hostDataMC, *hostDataRDSA, *deviceDataMC, *deviceDataRDSA;
+    // double *hostDataMC, *hostDataRDSA, *deviceDataMC, *deviceDataRDSA;
+    int *managedIndices;
+    double *managedDataMC, *managedDataRDSA;
 
     // SystemControllerVariable *hstSCV, *devSCV;
     double *_state, *_reference,*_parameters, *_constraints, *_weightMatrix;

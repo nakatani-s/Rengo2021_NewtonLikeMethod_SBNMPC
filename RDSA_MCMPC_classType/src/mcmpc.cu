@@ -17,12 +17,49 @@ unsigned int countBlocks(unsigned int a, unsigned int b)
 	return num;
 }
 
+__host__ __device__ void compute_weighted_mean(double *out, IndexParams *Idx, int *indices, SampleInfo *info)
+{
+    double totalweight = 0.0;
+
+    for(int i = 0; i < Idx->elite_sample_size; i++)
+    {
+        if(isnan(info[indices[i]].weight) || isinf(info[indices[i]].weight)){
+            totalweight += 0.0;
+        }else{
+            totalweight += info[indices[i]].weight;
+        }
+    }
+    for(int t = 0; t < Idx->InputByHorizon; t++){
+        info[Idx->sample_size].input[t] = 0.0;
+        for(int i = 0; i < Idx->elite_sample_size; i++)
+        {
+            if(isnan(info[indices[i]].weight) || isinf(info[indices[i]].weight))
+            {
+                info[Idx->sample_size].input[t] += 0.0;
+            }else{
+                info[Idx->sample_size].input[t] += (info[indices[i]].weight * info[indices[i]].input[t]) / totalweight;
+            }
+            if(isnan(info[Idx->sample_size].input[t]) || isinf(info[Idx->sample_size].input[t]))
+            {
+                out[t] = 0.0;
+            }else{
+                out[t] = info[Idx->sample_size].input[t];
+            }
+        }
+    }
+}
 __global__ void setup_RandomSeed(curandState *st, int seed)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
     /* Each thread gets same seed, a different sequence number,
      no offset */
     curand_init(seed, id, 0, &st[id]);
+}
+
+__global__ void get_managed_indices(int *mng_indices_vec, int *thrust_indices_vec)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    mng_indices_vec[id] = thrust_indices_vec[id];
 }
 
 __device__ double gen_input(unsigned int id, curandState *state, double ave, double var)

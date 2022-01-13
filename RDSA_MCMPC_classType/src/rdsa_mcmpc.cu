@@ -66,7 +66,7 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
     CHECK( cudaMalloc(&TensortL, sizeof(double) * Idx->FittingSampleSize) );*/
 
     /* DataStructures for Tensor Vector per Samples */
-    info = new SampleInfo[Idx->sample_size];
+    info = new SampleInfo[Idx->sample_size + 1];
     init_structure(info, Idx->sample_size, gIdx);
 
     qhp = new QHP[gIdx->sample_size];
@@ -74,19 +74,22 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
 
     /* thrust ベクターの実体を定義 */
     thrust::host_vector<int> indices_host_vec_temp(CONTROLLER::NUM_OF_SAMPLES);
-    indices_host_vec = indices_host_vec_temp;
+    // indices_host_vec = indices_host_vec_temp;
     // thrust::device_vector<int> indices_device_vec_temp(CONTROLLER::NUM_OF_SAMPLES);
     // indices_device_vec = indices_device_vec_temp;
     indices_device_vec = indices_host_vec_temp;
     thrust::host_vector<double> sort_key_host_vec_temp(CONTROLLER::NUM_OF_SAMPLES);
-    sort_key_host_vec = sort_key_host_vec_temp;
+    // sort_key_host_vec = sort_key_host_vec_temp;
     sort_key_device_vec = sort_key_host_vec_temp; 
 
     /* コスト比較のために推定入力を一時保存するための配列の実体 */
-    hostDataMC = (double *)malloc(sizeof(double) * Idx->InputByHorizon);
-    hostDataRDSA =  (double *)malloc(sizeof(double) * Idx->InputByHorizon);
-    CHECK( cudaMalloc(&deviceDataMC, sizeof(double) * Idx->InputByHorizon) );
-    CHECK( cudaMalloc(&deviceDataRDSA, sizeof(double) * Idx->InputByHorizon) );
+    // hostDataMC = (double *)malloc(sizeof(double) * Idx->InputByHorizon);
+    // hostDataRDSA =  (double *)malloc(sizeof(double) * Idx->InputByHorizon);
+    // CHECK( cudaMalloc(&deviceDataMC, sizeof(double) * Idx->InputByHorizon) );
+    // CHECK( cudaMalloc(&deviceDataRDSA, sizeof(double) * Idx->InputByHorizon) );
+    CHECK( cudaMallocManaged(&managedIndices, sizeof(int) * Idx->sample_size) );
+    CHECK( cudaMallocManaged(&managedDataMC, sizeof(double) * Idx->InputByHorizon) );
+    CHECK( cudaMallocManaged(&managedDataRDSA, sizeof(double) * Idx->InputByHorizon) );
 
     // cusolver & cublas の基本設定
     CHECK_CUSOLVER( cusolverDnCreate(&cusolverH), "Failed to Create cusolver handle" );
@@ -132,11 +135,11 @@ void rdsa_mcmpc::set(double *a, valueType type)
             {
                 for(int k = 0; k < OCP::DIM_OF_INPUT; k++)
                 {
-                    hostDataMC[index] = a[k];
+                    managedDataMC[index] = a[k];
                     index++;
                 }
             }
-            CHECK( cudaMemcpy(deviceDataMC, hostDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyHostToDevice) );
+            // CHECK( cudaMemcpy(deviceDataMC, hostDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyHostToDevice) );
             break;
         case setParameter:
             for(int i = 0; i < OCP::DIM_OF_SYSTEM_PARAMS; i++)
@@ -186,7 +189,9 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
         }
         start_t = clock();
         // parallelSimForMCMPC<<<numBlocks,threadPerBlocks>>>( var, devRandSeed, deviceDataMC, devSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data()) );
-        parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
+        // parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
+                                                        // info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()), thrust::raw_pointer_cast(indices_device_vec.data()));
+        parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, managedDataMC, devRandSeed, 
                                                         info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()), thrust::raw_pointer_cast(indices_device_vec.data()));
         cudaDeviceSynchronize();
         stop_t = clock();
@@ -196,12 +201,18 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
         thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
         stop_t = clock();
         thrust_time = stop_t - thrust_start_t;
-        calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), info);
+        // この子が非常に処理を重くしている行けない子
+        // __global__ から __host__ __device__ 関数に書き換え
+        // deviceDataMC を cudaMallocからcudaMallocManagedを使った変数に変える必要あり
+        // calc_weighted_mean<<<1,1>>>(deviceDataMC, devIdx,thrust::raw_pointer_cast(indices_device_vec.data()), info);
+        get_managed_indices<<<numBlocks, threadPerBlocks>>>(managedIndices, thrust::raw_pointer_cast(indices_device_vec.data()));
+        cudaDeviceSynchronize();
+        compute_weighted_mean(managedDataMC, gIdx, managedIndices, info);
         stop_t = clock();
         all_time = stop_t - start_t;
-        CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
+        // CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
     }
-    costValue = calc_cost(hostDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);
+    costValue = calc_cost(managedDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);
     printf("time step :: %lf <====> cost value :: %lf\n", time_steps * gIdx->control_cycle, costValue);
     printf("TIME of GPU executed parallel simulation := %f\n", gpu_time / CLOCKS_PER_SEC);
     printf("TIME of executed Sort by Thrust := %f\n",thrust_time / CLOCKS_PER_SEC);
@@ -209,7 +220,7 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
     // 予測入力を返す
     for(int i = 0; i < gIdx->dim_of_input; i++)
     {
-        CurrentInput[i] = hostDataMC[i];
+        CurrentInput[i] = managedDataMC[i];
     }
     
     time_steps++;
