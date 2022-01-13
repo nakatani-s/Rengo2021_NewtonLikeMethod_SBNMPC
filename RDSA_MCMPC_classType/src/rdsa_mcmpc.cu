@@ -67,7 +67,7 @@ rdsa_mcmpc::rdsa_mcmpc(CoolingMethod method)
 
     /* DataStructures for Tensor Vector per Samples */
     info = new SampleInfo[Idx->sample_size + 1];
-    init_structure(info, Idx->sample_size, gIdx);
+    init_structure(info, Idx->sample_size + 1, gIdx);
 
     qhp = new QHP[gIdx->sample_size];
     init_structure(qhp, Idx->sample_size, gIdx);
@@ -172,8 +172,9 @@ void rdsa_mcmpc::set(double *a, valueType type)
 void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
 {
     double var;
-    float all_time, gpu_time, thrust_time;
-    clock_t start_t, stop_t, thrust_start_t;
+    float all_time;
+    clock_t start_t, stop_t;
+    start_t = clock();
     for(int iter = 0; iter < CONTROLLER::ITERATIONS; iter++)
     {
         switch(cMethod)
@@ -187,20 +188,19 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
             default:
                 var = CONTROLLER::SIGMA;
         }
-        start_t = clock();
         // parallelSimForMCMPC<<<numBlocks,threadPerBlocks>>>( var, devRandSeed, deviceDataMC, devSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data()) );
         // parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, deviceDataMC, devRandSeed, 
                                                         // info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()), thrust::raw_pointer_cast(indices_device_vec.data()));
         parallelSimForMC<<<numBlocks, threadPerBlocks>>>(var, _state, _parameters, _reference, _constraints, _weightMatrix, managedDataMC, devRandSeed, 
                                                         info, devIdx, thrust::raw_pointer_cast(sort_key_device_vec.data()), thrust::raw_pointer_cast(indices_device_vec.data()));
         cudaDeviceSynchronize();
-        stop_t = clock();
-        gpu_time = stop_t - start_t;
-        thrust_start_t = clock();
+        // stop_t = clock();
+        // gpu_time = stop_t - start_t;
+        // thrust_start_t = clock();
         // thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
         thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
-        stop_t = clock();
-        thrust_time = stop_t - thrust_start_t;
+        // stop_t = clock();
+        // thrust_time = stop_t - thrust_start_t;
         // この子が非常に処理を重くしている行けない子
         // __global__ から __host__ __device__ 関数に書き換え
         // deviceDataMC を cudaMallocからcudaMallocManagedを使った変数に変える必要あり
@@ -208,14 +208,14 @@ void rdsa_mcmpc::execute_rdsa_mcmpc(double *CurrentInput)
         get_managed_indices<<<numBlocks, threadPerBlocks>>>(managedIndices, thrust::raw_pointer_cast(indices_device_vec.data()));
         cudaDeviceSynchronize();
         compute_weighted_mean(managedDataMC, gIdx, managedIndices, info);
-        stop_t = clock();
-        all_time = stop_t - start_t;
         // CHECK( cudaMemcpy(hostDataMC, deviceDataMC, sizeof(double) * gIdx->InputByHorizon, cudaMemcpyDeviceToHost) );
     }
     costValue = calc_cost(managedDataMC, _state, _parameters, _reference, _constraints, _weightMatrix, gIdx);
+    stop_t = clock();
+    all_time = stop_t - start_t;
     printf("time step :: %lf <====> cost value :: %lf\n", time_steps * gIdx->control_cycle, costValue);
-    printf("TIME of GPU executed parallel simulation := %f\n", gpu_time / CLOCKS_PER_SEC);
-    printf("TIME of executed Sort by Thrust := %f\n",thrust_time / CLOCKS_PER_SEC);
+    /*printf("TIME of GPU executed parallel simulation := %f\n", gpu_time / CLOCKS_PER_SEC);
+    printf("TIME of executed Sort by Thrust := %f\n",thrust_time / CLOCKS_PER_SEC);*/
     printf("TIME of All procedure ended := %f\n", all_time / CLOCKS_PER_SEC);
     // 予測入力を返す
     for(int i = 0; i < gIdx->dim_of_input; i++)
